@@ -1,0 +1,13 @@
+{
+  "name": "@chouquette/react-dom",
+  "version": "0.0.0",
+  "description": "Stands in for react-dom in chouquette apps",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "dependencies": { "chouquette": "0.0.0" },
+  "peerDependencies": { "react": "^19.3.0" }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "counter",
+  "private": true,
+  "type": "module",
+  "dependencies": { "chouquette": "0.0.0", "react": "^19.3.0" }
+}
