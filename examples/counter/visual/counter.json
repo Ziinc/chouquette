@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "name": "counter",
+  "image": "counter.png",
+  "hash": "1af628fe19639f68",
+  "width": 1280,
+  "height": 720,
+  "scale": 1.0,
+  "checks": [
+    {
+      "text": "Large bold text reads 'Count: ' followed by a number of 1 or more",
+      "severity": "must",
+      "verdict": {
+        "status": "pass",
+        "reason": "Bold 'Count: 1' in large type",
+        "judge": "agent"
+      }
+    },
+    {
+      "text": "Below the text is a blue button with a white plus sign",
+      "severity": "must",
+      "verdict": {
+        "status": "pass",
+        "reason": "A blue rounded button with a white + sits under the text",
+        "judge": "agent"
+      }
+    },
+    {
+      "text": "The text and the button are centred horizontally",
+      "severity": "must",
+      "verdict": {
+        "status": "pass",
+        "reason": "Both are centred at x of about 640 in a 1280-wide window",
+        "judge": "agent"
+      }
+    },
+    {
+      "text": "Nothing is cut off or overlapping",
+      "severity": "should",
+      "verdict": {
+        "status": "pass",
+        "reason": "Nothing is clipped or overlaps",
+        "judge": "agent"
+      }
+    }
+  ]
+}

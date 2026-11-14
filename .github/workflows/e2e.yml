@@ -46,11 +46,16 @@ jobs:
             libwayland-dev libx11-xcb-dev libfontconfig-dev libfreetype-dev libgbm-dev \
             libegl-dev libxrandr-dev clang fonts-dejavu xvfb
       - run: npm ci
+      # Plain-English visual checks (chouquette/playwright's expectToLook).
+      - run: cargo install --git https://github.com/Ziinc/gpui-visual-test cargo-visual-test --locked
       - run: cargo build -p chouquette_host --features playwright
         working-directory: native
       - name: Drive every example
         env:
           CI: "1"
+          # Each runner draws a little differently: a shot that is not the
+          # recorded one is judged again (GPUI_VISUAL_JUDGE), or warns.
+          GPUI_VISUAL_UNSURE: warn
           VK_ICD_FILENAMES: ${{ runner.os == 'Linux' && '/usr/share/vulkan/icd.d/lvp_icd.json' || '' }}
         run: |
           for example in examples/*/; do
