@@ -48,21 +48,23 @@ jobs:
       - run: npm ci
       - run: cargo build -p chouquette_host --features playwright
         working-directory: native
-      - run: npm run build
-        working-directory: examples/counter
-      - name: Drive the counter
-        working-directory: examples/counter
+      - name: Drive every example
         env:
           CI: "1"
           VK_ICD_FILENAMES: ${{ runner.os == 'Linux' && '/usr/share/vulkan/icd.d/lvp_icd.json' || '' }}
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a npx playwright test --trace off
-          else npx playwright test --trace off; fi
+          for example in examples/*/; do
+            echo "::group::$example"
+            (cd "$example" && npm run build &&
+              if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a npx playwright test --trace off
+              else npx playwright test --trace off; fi)
+            echo "::endgroup::"
+          done
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: e2e-${{ matrix.os }}
-          path: examples/counter/test-results
+          path: examples/*/test-results
 
   android:
     runs-on: ubuntu-24.04

@@ -23,7 +23,7 @@ const elements: Record<string, (fn: (e: any) => void) => ReactNode> = {
   submit: fn => <form onSubmit={fn} />,
   keydown: fn => <div onWindowKeyDown={fn} />,
   pick: fn => <button onPickFile={fn}>open</button>,
-  drag: fn => <div onDrag={fn} />,
+  drag: fn => <div onDragBy={fn} />,
 };
 
 const inputs = (fixtures as Fixture[]).filter(f => ["click", "change", "submit", "keydown", "pick", "drag"].includes(f.json.type));
@@ -59,6 +59,13 @@ for (const { name, json } of inputs) {
     }
   });
 }
+
+test("a form action gets the submitted values as FormData", () => {
+  const fn = vi.fn();
+  const { root, emit } = mount(<form action={fn} />, 0);
+  emit({ type: "submit", window: 0, event: root.a["phx-submit"], values: { name: "Ana", agree: "on" } });
+  expect(Object.fromEntries(fn.mock.calls[0][0].entries())).toEqual({ name: "Ana", agree: "on" });
+});
 
 test("an event for another window is ignored", () => {
   const fn = vi.fn();

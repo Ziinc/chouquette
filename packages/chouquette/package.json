@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./test": "./src/test/index.ts"
+    "./test": "./src/test/index.ts",
+    "./playwright": "./cli/playwright.mjs"
   },
   "dependencies": {
     "@chouquette/react-dom": "0.0.0",
@@ -14,9 +15,15 @@
     "react-reconciler": "^0.34.0"
   },
   "peerDependencies": {
-    "react": "^19.3.0"
+    "react": "^19.3.0",
+    "@playwright/test": ">=1.58 <1.65"
   },
   "bin": {
     "chouquette": "./bin/chouquette.mjs"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
   }
 }

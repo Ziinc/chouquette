@@ -39,14 +39,49 @@ export type Container = RootContainer | RowsContainer;
 const isContainer = (p: Parent): p is Container => "kind" in p;
 const rootOf = (c: Container) => (c.kind === "rows" ? c.root : c);
 
-/** The container `node` is in, and its path there; null if detached. */
+const isText = (n: Child | undefined): n is TextInstance => !!n && "text" in n;
+
+/**
+ * Where `child` is among `parent`'s children on the wire: a run of adjacent
+ * text is one string there, as baguette's trees have it.
+ */
+function slot(children: Child[], child: Child): number {
+  let at = -1;
+  for (let i = 0; i < children.length; i++) {
+    if (!(isText(children[i]) && isText(children[i - 1]))) at++;
+    if (children[i] === child) return at;
+  }
+  throw new Error("not a child");
+}
+
+/** The text of the run `child` is in. */
+function runText(children: Child[], child: Child): string {
+  let i = children.indexOf(child);
+  while (isText(children[i - 1])) i--;
+  let text = "";
+  for (; isText(children[i]); i++) text += (children[i] as TextInstance).text;
+  return text;
+}
+
+/** Children as the wire has them, adjacent text joined. */
+export function serializeChildren(children: Child[]): Node[] {
+  const out: Node[] = [];
+  children.forEach((child, i) => {
+    if (!isText(child)) out.push(serialize(child));
+    else if (isText(children[i - 1])) out[out.length - 1] += child.text;
+    else out.push(child.text);
+  });
+  return out;
+}
+
+/** The container `node` is in, and its path there on the wire; null if detached. */
 function locate(node: Child): { container: Container; at: number[] } | null {
   const at: number[] = [];
   for (let n: Child = node; ; ) {
     const p: Parent | null = n.parent;
     if (!p) return null;
     if (isContainer(p)) return { container: p, at };
-    at.unshift(p.children.indexOf(n));
+    at.unshift(slot(p.children, n));
     n = p;
   }
 }
@@ -58,8 +93,18 @@ function record(container: Container, op: Op) {
 
 export function serialize(node: Child): Node {
   if ("text" in node) return node.text;
-  return { t: node.type, a: { ...node.attrs }, c: node.children.map(serialize) } satisfies Element;
+  return { t: node.type, a: { ...node.attrs }, c: serializeChildren(node.children) } satisfies Element;
 }
+
+/** Replaces `parent` whole: a change that joins or splits a run of text. */
+function replaceParent(parent: Instance) {
+  const where = locate(parent);
+  if (where) record(where.container, { op: "replace", at: where.at, node: serialize(parent) });
+}
+
+/** Whether inserting or removing `child` at `index` joins or splits a run of text. */
+const touchesText = (children: Child[], child: Child, index: number) =>
+  isText(child) || (isText(children[index - 1]) && isText(children[index + 1]));
 
 function insert(parent: Parent, child: Child, index: number) {
   parent.children.splice(index, 0, child);
@@ -69,18 +114,26 @@ function insert(parent: Parent, child: Child, index: number) {
     record(parent, { op: "replace", at: [], node: serialize(child) });
     return;
   }
+  if (touchesText(parent.children, child, index)) return replaceParent(parent);
   const where = locate(parent);
-  if (where) record(where.container, { op: "splice", at: where.at, start: index, delete: 0, c: [serialize(child)] });
+  if (where) record(where.container, { op: "splice", at: where.at, start: slot(parent.children, child), delete: 0, c: [serialize(child)] });
 }
 
 function remove(parent: Parent, child: Child) {
   const index = parent.children.indexOf(child);
-  const where = isContainer(parent) ? { container: parent, at: [] } : locate(parent);
+  if (isContainer(parent)) {
+    parent.children.splice(index, 1);
+    child.parent = null;
+    record(parent, { op: "replace", at: [], node: null });
+    return;
+  }
+  const touches = touchesText(parent.children, child, index);
+  const start = slot(parent.children, child);
   parent.children.splice(index, 1);
   child.parent = null;
-  if (!where) return;
-  if (isContainer(parent)) record(where.container, { op: "replace", at: [], node: null });
-  else record(where.container, { op: "splice", at: where.at, start: index, delete: 1, c: [] });
+  if (touches) return replaceParent(parent);
+  const where = locate(parent);
+  if (where) record(where.container, { op: "splice", at: where.at, start, delete: 1, c: [] });
 }
 
 const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, i) => x === b[i]);
@@ -170,7 +223,7 @@ export const reconciler = Reconciler({
   commitTextUpdate(text: TextInstance, _old: string, next: string) {
     text.text = next;
     const where = locate(text);
-    if (where) record(where.container, { op: "replace", at: where.at, node: next });
+    if (where && text.parent) record(where.container, { op: "replace", at: where.at, node: runText(text.parent.children, text) });
   },
   commitUpdate(inst: Instance, type: string, _prev: unknown, next: Record<string, unknown>) {
     inst.props = next;

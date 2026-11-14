@@ -34,7 +34,7 @@ fn counter_renders_and_counts_clicks() {
     assert_eq!(*window, 0);
     assert_eq!(
         frame["root"]["c"][0]["c"],
-        serde_json::json!(["Count: ", "0"])
+        serde_json::json!(["Count: 0"])
     );
     let button = frame["root"]["c"][1]["a"]["phx-click"].as_str().unwrap();
 
@@ -52,6 +52,6 @@ fn counter_renders_and_counts_clicks() {
         .collect();
     assert_eq!(
         patch,
-        [serde_json::json!({"patch": [{"op": "replace", "at": [0, 1], "node": "1"}]})]
+        [serde_json::json!({"patch": [{"op": "replace", "at": [0, 0], "node": "Count: 1"}]})]
     );
 }

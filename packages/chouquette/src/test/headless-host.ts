@@ -4,7 +4,13 @@
 import type { Transport } from "../host";
 import { applyPatch, type HostEvent, type Node } from "../wire";
 
-type Message = { root?: Node; patch?: Parameters<typeof applyPatch>[1]; rows?: { id: string; start: number; rows: Node[] } };
+type Binding = { keys: string; action: string; context?: string };
+type Message = {
+  root?: Node;
+  keymap?: Binding[];
+  patch?: Parameters<typeof applyPatch>[1];
+  rows?: { id: string; start: number; rows: Node[] };
+};
 
 export type HeadlessWindow = { title?: string; width?: number; height?: number; x?: number; y?: number };
 
@@ -12,6 +18,10 @@ export class HeadlessHost implements Transport {
   trees = new Map<number, Node>();
   /** Each list's rows the host has, by list id, then row index. */
   rows = new Map<number, Map<string, Map<number, Node>>>();
+  /** Each window's key bindings, from its last frame. */
+  keymaps = new Map<number, Binding[]>();
+  /** Text typed into inputs, by window then element path, with the `value` it replaced. */
+  typed = new Map<number, Map<string, { text: string; rendered: string }>>();
   clipboard: string | null = null;
   appearance: "light" | "dark" = "light";
   windows = new Map<number, HeadlessWindow>([[0, {}]]);
@@ -29,8 +39,34 @@ export class HeadlessHost implements Transport {
       const rows = lists.get(message.rows.id) ?? new Map<number, Node>();
       lists.set(message.rows.id, rows);
       message.rows.rows.forEach((row, i) => rows.set(message.rows!.start + i, row));
-    } else if ("root" in message) this.trees.set(window, message.root ?? null);
-    else if (message.patch) this.trees.set(window, applyPatch(this.trees.get(window) ?? null, message.patch));
+    } else if ("root" in message) {
+      this.trees.set(window, message.root ?? null);
+      this.typed.delete(window);
+      this.keymaps.set(window, message.keymap ?? []);
+    }
+    else if (message.patch) {
+      this.trees.set(window, applyPatch(this.trees.get(window) ?? null, message.patch));
+      // An input the app re-renders shows what it renders, not what was typed.
+      const typed = this.typed.get(window);
+      for (const op of message.patch) {
+        const at = ["root", ...op.at].join(".");
+        for (const path of typed?.keys() ?? []) {
+          const inside = path.startsWith(`${at}.`);
+          const gone =
+            op.op === "attrs" ? path === at
+            : op.op === "replace" ? path === at || inside
+            : inside && Number(path.slice(at.length + 1).split(".")[0]) >= op.start;
+          if (gone) typed!.delete(path);
+        }
+      }
+    }
+  }
+
+  /** Types `text` into the input at `path`, as a user does in the native one. */
+  type(window: number, path: string, text: string, rendered: string) {
+    const typed = this.typed.get(window) ?? new Map();
+    this.typed.set(window, typed);
+    typed.set(path, { text, rendered });
   }
 
   onEvent(listener: (event: HostEvent) => void) {

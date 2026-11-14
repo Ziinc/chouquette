@@ -127,7 +127,12 @@ export function createRoot({ window, theme }: RootOptions, transport: Transport 
     const calls = handlersFor(inst.type, event.type, inst.props).filter(([prop]) => typeof inst.props[prop] === "function");
     if (calls.length)
       discrete(() => {
-        for (const [prop, type] of calls) (inst.props[prop] as (e: unknown) => void)(type === "rows" ? event : syntheticEvent(type, event));
+        for (const [prop, type] of calls) {
+          const handler = inst.props[prop] as (e: unknown) => void;
+          if (type === "rows") handler(event);
+          else if (type === "action") handler(syntheticEvent("submit", event).formData);
+          else handler(syntheticEvent(type, event));
+        }
       });
   });
 

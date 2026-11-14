@@ -5,10 +5,12 @@ const handlers: Record<string, string> = {
   onClick: "phx-click",
   onChange: "phx-change",
   onSubmit: "phx-submit",
+  // React 19's form actions: `<form action={formData => ...}>`.
+  action: "phx-submit",
   onWindowKeyDown: "phx-window-keydown",
   onPickFile: "phx-pick-file",
   onPickSave: "phx-pick-save",
-  onDrag: "phx-drag",
+  onDragBy: "phx-drag",
   onRows: "phx-rows",
 };
 
@@ -51,13 +53,13 @@ export function handlersFor(type: string, eventType: string, props: Record<strin
     case "change":
       return [["onChange", "change"]];
     case "submit":
-      return [["onSubmit", "submit"]];
+      return [["onSubmit", "submit"], ["action", "action"]];
     case "keydown":
       return [["onWindowKeyDown", "keydown"]];
     case "pick":
       return [["onPickFile", "pick"], ["onPickSave", "pick"]];
     case "drag":
-      return [["onDrag", "drag"]];
+      return [["onDragBy", "drag"]];
     case "rows":
       return [["onRows", "rows"]];
     default:
