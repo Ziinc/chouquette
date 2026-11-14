@@ -12,10 +12,13 @@ test("an Android emulator build", () => {
   ]);
 });
 
+// Xcode runs Cargo for iOS and passes on only TAURI_* variables.
+const iosEnv = [...env, "--env", "TAURI_LEVAIN_APP_ARCHIVE=/t/app.tar.gz"];
+
 test("an iOS simulator build", () => {
   expect(mobileSteps({ ...common, target: "ios-sim" })).toEqual([
-    ["levain-pack", ["init", "ios", "--project", "/n/chouquette_ios", "--config", "/t/tauri.json", ...env]],
-    ["levain-pack", ["build", "ios", "--project", "/n/chouquette_ios", "--config", "/t/tauri.json", ...env,
+    ["levain-pack", ["init", "ios", "--project", "/n/chouquette_ios", "--config", "/t/tauri.json", ...iosEnv]],
+    ["levain-pack", ["build", "ios", "--project", "/n/chouquette_ios", "--config", "/t/tauri.json", ...iosEnv,
       "--product", "app=/o/counter.app", "--", "--target", "aarch64-sim", "--debug"]],
   ]);
 });

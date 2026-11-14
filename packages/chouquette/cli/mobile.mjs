@@ -42,6 +42,8 @@ export function mobileSteps({ target, native, archive, config, out, name, releas
   const project = join(native, t.platform === "android" ? "chouquette_host" : "chouquette_ios");
   const common = [
     "--project", project, "--config", config, "--env", `LEVAIN_APP_ARCHIVE=${archive}`,
+    // Xcode runs Cargo for iOS and passes on only TAURI_* variables; levain reads either.
+    ...(t.platform === "ios" ? ["--env", `TAURI_LEVAIN_APP_ARCHIVE=${archive}`] : []),
     ...(extraEnv ? ["--env", `${extraEnv[0]}=${extraEnv[1]}`] : []),
   ];
   const init = ["init", t.platform, ...common, ...(signingEnv ? ["--signing-env", signingEnv] : [])];
