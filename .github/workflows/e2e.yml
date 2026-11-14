@@ -169,9 +169,17 @@ jobs:
           workspaces: native
           key: ios-sim
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      # idb-companion has no bottle and compiles only with Xcode 26, which the
+      # image carries beside its default; the app builds with the default.
       - name: Install xcodegen, idb and levain-pack
         run: |
-          brew install xcodegen facebook/fb/idb-companion
+          brew install xcodegen
+          default=$(xcode-select -p)
+          xcode26=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$xcode26" ] || { echo "no Xcode 26 on this image"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode26"
+          brew install facebook/fb/idb-companion
+          sudo xcode-select -s "$default"
           pipx install fb-idb
           cargo install --git https://github.com/Ziinc/levain --rev "$LEVAIN_REV" levain-pack --locked
       - run: npm ci
