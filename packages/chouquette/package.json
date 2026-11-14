@@ -1,0 +1,22 @@
+{
+  "name": "chouquette",
+  "version": "0.0.0",
+  "description": "Native GPUI apps in TypeScript and React",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./test": "./src/test/index.ts"
+  },
+  "dependencies": {
+    "@chouquette/react-dom": "0.0.0",
+    "esbuild": "^0.28.2",
+    "react-reconciler": "^0.34.0"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
+  },
+  "bin": {
+    "chouquette": "./bin/chouquette.mjs"
+  }
+}

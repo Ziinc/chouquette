@@ -1,0 +1,6 @@
+{
+  "entry": "src/app.tsx",
+  "runtime": "quickjs",
+  "identifier": "com.example.counter",
+  "window": { "title": "Counter", "width": 360, "height": 240 }
+}

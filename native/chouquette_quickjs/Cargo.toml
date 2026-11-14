@@ -1,0 +1,16 @@
+[package]
+name = "chouquette_quickjs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Runs chouquette apps on QuickJS inside levain's host"
+
+[dependencies]
+levain = { workspace = true }
+rquickjs = "0.14"
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

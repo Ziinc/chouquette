@@ -1,0 +1,28 @@
+[package]
+name = "chouquette_host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "levain's host with the QuickJS runtime: runs chouquette apps"
+
+[lib]
+# `cdylib` is what Android loads; `staticlib` is what Xcode links for iOS;
+# `rlib` is what the desktop executable uses.
+name = "chouquette_host_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Serves the app's windows to Playwright clients (gpui-playwright) when
+# GPUI_PLAYWRIGHT is set. Test builds only.
+playwright = ["levain/playwright"]
+
+[dependencies]
+chouquette_quickjs = { path = "../chouquette_quickjs" }
+levain = { workspace = true }
+# For `generate_context!`; levain's own Tauri, with its features.
+tauri = { version = "2.12", default-features = false, features = ["unstable", "wry", "compression", "common-controls-v6", "dynamic-acl", "x11"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
