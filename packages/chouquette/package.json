@@ -8,6 +8,15 @@
     ".": "./src/index.ts",
     "./test": "./src/test/index.ts"
   },
-  "dependencies": { "react-reconciler": "^0.34.0" },
-  "peerDependencies": { "react": "^19.3.0" }
+  "dependencies": {
+    "@chouquette/react-dom": "0.0.0",
+    "esbuild": "^0.28.2",
+    "react-reconciler": "^0.34.0"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
+  },
+  "bin": {
+    "chouquette": "./bin/chouquette.mjs"
+  }
 }

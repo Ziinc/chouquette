@@ -7,7 +7,22 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": []
+    "types": [
+      "node"
+    ],
+    "allowJs": true,
+    "paths": {
+      "react-dom": [
+        "./packages/react-dom/src/index.ts"
+      ],
+      "react-dom/client": [
+        "./packages/react-dom/src/client.ts"
+      ]
+    }
   },
-  "include": ["packages/*/src", "packages/*/test", "examples/*/src"]
+  "include": [
+    "packages/*/src",
+    "packages/*/test",
+    "examples/*/src"
+  ]
 }

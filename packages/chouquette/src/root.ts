@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ConcurrentRoot, DiscreteEventPriority } from "react-reconciler/constants.js";
-import { type Container, getPriority, reconciler, setPriority } from "./host-config";
+import { type Container, getPriority, reconciler, serialize, setPriority } from "./host-config";
 import type { HostEvent } from "./wire";
 
 /** How a root reaches the host: levain's runtime, or the headless host in tests. */
@@ -47,7 +47,13 @@ export function createRoot(
   };
 
   transport.onEvent(event => {
-    if (event.window !== window || !event.event) return;
+    if (event.window !== window) return;
+    // The host couldn't apply a patch: it gets the whole frame.
+    if (event.type === "resync") {
+      if (sent) transport.send(window, JSON.stringify({ root: container.children[0] ? serialize(container.children[0]) : null }));
+      return;
+    }
+    if (!event.event) return;
     const handler = container.handlers.get(event.event)?.props[eventProps[event.type]];
     if (typeof handler !== "function") return;
     const previous = getPriority();

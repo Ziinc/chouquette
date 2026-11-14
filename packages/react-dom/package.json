@@ -6,8 +6,11 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./package.json": "./package.json"
   },
-  "dependencies": { "chouquette": "0.0.0" },
-  "peerDependencies": { "react": "^19.3.0" }
+  "peerDependencies": {
+    "chouquette": "0.0.0",
+    "react": "^19.3.0"
+  }
 }

@@ -104,6 +104,8 @@ export const setPriority = (p: number) => (priority = p);
 export const getPriority = () => priority;
 
 const noop = () => {};
+// React needs a host context, even one that never changes.
+const hostContext = {};
 
 export const reconciler = Reconciler({
   rendererPackageName: "chouquette",
@@ -132,8 +134,8 @@ export const reconciler = Reconciler({
   },
   finalizeInitialChildren: () => false,
   shouldSetTextContent: () => false,
-  getRootHostContext: () => null,
-  getChildHostContext: (ctx: null) => ctx,
+  getRootHostContext: () => hostContext,
+  getChildHostContext: () => hostContext,
   getPublicInstance: (inst: Child) => inst,
   prepareForCommit: () => null,
   resetAfterCommit(container: Container) {

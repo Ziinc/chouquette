@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["chouquette_quickjs", "chouquette_host"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Ziinc/chouquette"
+
+[workspace.dependencies]
+levain = { git = "https://github.com/Ziinc/levain", rev = "268f2c3cc21108f5e9a780b8c02d87bcd8de73fb" }
+
+# As levain's own workspace: gpui-kit 0.7.3 plus the painted-text observation
+# gpui-playwright reads.
+[patch.crates-io]
+gpui-kit = { git = "https://github.com/Ziinc/gpui-kit", rev = "7ea1125954e6701d849fd448aab08ab2ac63d07f" }
+gpui-base = { git = "https://github.com/Ziinc/gpui-kit", rev = "7ea1125954e6701d849fd448aab08ab2ac63d07f" }
+gpui-component = { git = "https://github.com/Ziinc/gpui-kit", rev = "7ea1125954e6701d849fd448aab08ab2ac63d07f" }
+gpui-component-macros = { git = "https://github.com/Ziinc/gpui-kit", rev = "7ea1125954e6701d849fd448aab08ab2ac63d07f" }
+gpui-kit-assets = { git = "https://github.com/Ziinc/gpui-kit", rev = "7ea1125954e6701d849fd448aab08ab2ac63d07f" }
+
+[profile.dev.package.wgpu-types]
+debug-assertions = false
+
+[profile.release]
+strip = true
