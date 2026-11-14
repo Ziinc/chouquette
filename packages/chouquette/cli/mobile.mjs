@@ -6,27 +6,44 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { build } from "./build.mjs";
 
-/** Phone targets: platform, Tauri target, and whether it is a device. */
-/** @type {Record<string, { platform: string, tauri: string }>} */
+/** Phone targets: platform, Tauri target, Rust triple and clang's target. */
+/** @type {Record<string, { platform: string, tauri: string, triple: string, clang?: string }>} */
 export const targets = {
-  "android-x86_64": { platform: "android", tauri: "x86_64" },
-  "android-arm64": { platform: "android", tauri: "aarch64" },
-  "ios-sim": { platform: "ios", tauri: "aarch64-sim" },
-  ios: { platform: "ios", tauri: "aarch64" },
+  "android-x86_64": { platform: "android", tauri: "x86_64", triple: "x86_64-linux-android" },
+  "android-arm64": { platform: "android", tauri: "aarch64", triple: "aarch64-linux-android" },
+  "ios-sim": { platform: "ios", tauri: "aarch64-sim", triple: "aarch64-apple-ios-sim", clang: "arm64-apple-ios-simulator" },
+  ios: { platform: "ios", tauri: "aarch64", triple: "aarch64-apple-ios", clang: "arm64-apple-ios" },
 };
+
+/**
+ * rquickjs generates its bindings for phones with bindgen, which must parse
+ * QuickJS's headers against the phone's SDK, not the build machine's.
+ * @param {string} target
+ * @param {{ ndk?: string, host?: string, sdk?: string }} paths
+ * @returns {[string, string]}
+ */
+export function bindgenEnv(target, { ndk, host, sdk }) {
+  const t = targets[target];
+  const name = `BINDGEN_EXTRA_CLANG_ARGS_${t.triple.replaceAll("-", "_")}`;
+  if (t.platform === "android") return [name, `--sysroot=${ndk}/toolchains/llvm/prebuilt/${host}/sysroot`];
+  return [name, `--sysroot=${sdk} --target=${t.clang}`];
+}
 
 /**
  * The levain-pack commands that build `name` for `target`: debug builds
  * (APK, simulator .app) to test, release builds (AAB, IPA) to ship.
  * @param {{ target: string, native: string, archive: string, config: string, out: string, name: string,
- *   release?: boolean, signingEnv?: string, features?: string[] }} options
+ *   release?: boolean, signingEnv?: string, features?: string[], extraEnv?: [string, string] }} options
  * @returns {[string, string[]][]}
  */
-export function mobileSteps({ target, native, archive, config, out, name, release = false, signingEnv, features = [] }) {
+export function mobileSteps({ target, native, archive, config, out, name, release = false, signingEnv, features = [], extraEnv }) {
   const t = targets[target];
   if (!t) throw new Error(`unknown target ${target} (${Object.keys(targets).join(", ")})`);
   const project = join(native, t.platform === "android" ? "chouquette_host" : "chouquette_ios");
-  const common = ["--project", project, "--config", config, "--env", `LEVAIN_APP_ARCHIVE=${archive}`];
+  const common = [
+    "--project", project, "--config", config, "--env", `LEVAIN_APP_ARCHIVE=${archive}`,
+    ...(extraEnv ? ["--env", `${extraEnv[0]}=${extraEnv[1]}`] : []),
+  ];
   const init = ["init", t.platform, ...common, ...(signingEnv ? ["--signing-env", signingEnv] : [])];
   const ext = t.platform === "android" ? (release ? "aab" : "apk") : release ? "ipa" : "app";
   const tauri = [
@@ -54,7 +71,13 @@ export async function buildMobile({ dir, target, out = join(dir, "dist", target)
   // Until the hosts ship on npm (M4): the native workspace of this checkout.
   const native = resolve(process.env.CHOUQUETTE_NATIVE ?? join(import.meta.dirname, "../../../native"));
   const signingEnv = release && target.startsWith("android") ? process.env.CHOUQUETTE_SIGNING_ENV : undefined;
-  for (const [cmd, args] of mobileSteps({ target, native, archive, config: tauri, out: resolve(out), name: pkg.name, release, signingEnv, features }))
+  const t = targets[target];
+  const extraEnv = bindgenEnv(target, {
+    ndk: process.env.ANDROID_NDK_HOME ?? process.env.NDK_HOME,
+    host: `${process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "windows" : "linux"}-x86_64`,
+    sdk: t.platform === "ios" ? execFileSync("xcrun", ["--sdk", target === "ios" ? "iphoneos" : "iphonesimulator", "--show-sdk-path"], { encoding: "utf8" }).trim() : undefined,
+  });
+  for (const [cmd, args] of mobileSteps({ target, native, archive, config: tauri, out: resolve(out), name: pkg.name, release, signingEnv, features, extraEnv }))
     execFileSync(process.env.LEVAIN_PACK ?? cmd, args, { stdio: "inherit" });
   return out;
 }

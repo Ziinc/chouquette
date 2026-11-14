@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { mobileSteps } from "../cli/mobile.mjs";
+import { bindgenEnv, mobileSteps } from "../cli/mobile.mjs";
 
 const common = { native: "/n", archive: "/t/app.tar.gz", config: "/t/tauri.json", out: "/o", name: "counter" };
 const env = ["--env", "LEVAIN_APP_ARCHIVE=/t/app.tar.gz"];
@@ -30,4 +30,21 @@ test("release builds for phones, signed from the environment on Android", () => 
 
 test("an unknown target is refused", () => {
   expect(() => mobileSteps({ ...common, target: "web" })).toThrow(/android-x86_64/);
+});
+
+test("bindgen parses QuickJS's headers against the phone's SDK", () => {
+  expect(bindgenEnv("android-arm64", { ndk: "/ndk", host: "linux-x86_64" })).toEqual([
+    "BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android",
+    "--sysroot=/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot",
+  ]);
+  expect(bindgenEnv("ios-sim", { sdk: "/sdk/iPhoneSimulator.sdk" })).toEqual([
+    "BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios_sim",
+    "--sysroot=/sdk/iPhoneSimulator.sdk --target=arm64-apple-ios-simulator",
+  ]);
+  expect(bindgenEnv("ios", { sdk: "/sdk/iPhoneOS.sdk" })[1]).toBe("--sysroot=/sdk/iPhoneOS.sdk --target=arm64-apple-ios");
+});
+
+test("the build passes bindgen's flags to levain-pack", () => {
+  const steps = mobileSteps({ ...common, target: "android-x86_64", extraEnv: ["K", "V W"] });
+  expect(steps[1][1]).toContain("K=V W");
 });

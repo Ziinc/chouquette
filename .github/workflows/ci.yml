@@ -80,8 +80,17 @@ jobs:
           workspaces: native
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo build -p chouquette_ios --target ${{ matrix.target }}
+      # rquickjs's bindings for iOS come from bindgen, against the iOS SDK.
+      - name: Build
         working-directory: native
+        run: |
+          case ${{ matrix.target }} in
+            aarch64-apple-ios-sim) sdk=iphonesimulator; clang=arm64-apple-ios-simulator ;;
+            *) sdk=iphoneos; clang=arm64-apple-ios ;;
+          esac
+          triple=${{ matrix.target }}
+          export "BINDGEN_EXTRA_CLANG_ARGS_${triple//-/_}=--sysroot=$(xcrun --sdk $sdk --show-sdk-path) --target=$clang"
+          cargo build -p chouquette_ios --target "$triple"
 
   android:
     strategy:
@@ -111,5 +120,10 @@ jobs:
           sdkmanager --install "ndk;$NDK_VERSION"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
           cargo install cargo-ndk --locked
-      - run: cargo ndk -t ${{ matrix.abi }} build -p chouquette_host --lib
+      # rquickjs's bindings for Android come from bindgen, against the NDK's sysroot.
+      - name: Build
         working-directory: native
+        run: |
+          sysroot="--sysroot=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="$sysroot" BINDGEN_EXTRA_CLANG_ARGS_x86_64_linux_android="$sysroot"
+          cargo ndk -t ${{ matrix.abi }} build -p chouquette_host --lib
