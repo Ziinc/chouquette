@@ -38,9 +38,16 @@ impl Engine {
             let render = Function::new(ctx.clone(), move |window: u32, json: String| {
                 (api.render)(api.ctx, window, json.as_ptr(), json.len());
             });
+            let call = Function::new(ctx.clone(), move |json: String| {
+                (api.call)(api.ctx, json.as_ptr(), json.len());
+            });
             let log = Function::new(ctx.clone(), |line: String| levain::log_line(&line));
             globals
                 .set("__chouquette_render", render)
+                .catch(&ctx)
+                .map_err(|e| e.to_string())?;
+            globals
+                .set("__chouquette_call", call)
                 .catch(&ctx)
                 .map_err(|e| e.to_string())?;
             globals
@@ -171,6 +178,19 @@ mod tests {
             .eval(r#"__chouquette_host.send(2, '{"root":"hi"}')"#)
             .unwrap();
         assert_eq!(host.take(), [(2, r#"{"root":"hi"}"#.into())]);
+    }
+
+    #[test]
+    fn calls_go_through_the_host_api() {
+        let (api, host) = FakeHost::api();
+        let mut engine = Engine::new(api).unwrap();
+        engine
+            .eval(r#"__chouquette_host.call('{"call":"clipboard.read","ref":1,"args":{}}')"#)
+            .unwrap();
+        assert_eq!(
+            *host.calls.lock().unwrap(),
+            [r#"{"call":"clipboard.read","ref":1,"args":{}}"#]
+        );
     }
 
     #[test]

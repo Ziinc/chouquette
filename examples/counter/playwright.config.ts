@@ -5,7 +5,7 @@ import { defineConfig } from "@playwright/test";
 import { resolve } from "node:path";
 
 const port = process.env.GPUI_PLAYWRIGHT_PORT ?? "9333";
-const host = process.env.CHOUQUETTE_HOST ?? resolve(import.meta.dirname, "../../native/target/debug/chouquette_host");
+const host = process.env.CHOUQUETTE_HOST ?? resolve(import.meta.dirname, "../../native/target/debug/chouquette_host") + (process.platform === "win32" ? ".exe" : "");
 
 export default defineConfig({
   testDir: "./e2e",

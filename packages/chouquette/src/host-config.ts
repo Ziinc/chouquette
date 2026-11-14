@@ -1,7 +1,7 @@
 // A react-reconciler host config whose mutations are levain's patch ops.
+import { createContext } from "react";
 import Reconciler from "react-reconciler";
 import { DefaultEventPriority, NoEventPriority } from "react-reconciler/constants.js";
-import { createContext } from "react";
 import { toAttrs } from "./props";
 import type { Element, Node, Op } from "./wire";
 
@@ -12,32 +12,48 @@ export type Instance = {
   children: Child[];
   parent: Parent | null;
   id: string;
-  root: Container;
+  root: RootContainer;
 };
 export type TextInstance = { text: string; parent: Parent | null };
 type Child = Instance | TextInstance;
 type Parent = Instance | Container;
 
-export type Container = {
+/** A window's tree. Its mutations become patch ops. */
+export type RootContainer = {
+  kind: "root";
   children: Child[];
   ops: Op[];
+  /** Rows containers changed in this commit. */
+  dirty: Set<RowsContainer>;
   nextId: number;
   handlers: Map<string, Instance>;
-  /** Called after each commit with the ops it made. */
-  commit(ops: Op[], root: Node): void;
+  /** Called after each commit with its ops and the rows that changed. */
+  commit(ops: Op[], rows: RowsContainer[]): void;
 };
 
-const isContainer = (p: Parent): p is Container => "ops" in p;
+/** The rows a `<List>` shows, rendered through a portal and sent whole. */
+export type RowsContainer = { kind: "rows"; id: string; start: number; children: Child[]; root: RootContainer };
 
-function path(node: Child): number[] | null {
+export type Container = RootContainer | RowsContainer;
+
+const isContainer = (p: Parent): p is Container => "kind" in p;
+const rootOf = (c: Container) => (c.kind === "rows" ? c.root : c);
+
+/** The container `node` is in, and its path there; null if detached. */
+function locate(node: Child): { container: Container; at: number[] } | null {
   const at: number[] = [];
   for (let n: Child = node; ; ) {
-    const p = n.parent;
+    const p: Parent | null = n.parent;
     if (!p) return null;
-    if (isContainer(p)) return at;
+    if (isContainer(p)) return { container: p, at };
     at.unshift(p.children.indexOf(n));
     n = p;
   }
+}
+
+function record(container: Container, op: Op) {
+  if (container.kind === "rows") container.root.dirty.add(container);
+  else container.ops.push(op);
 }
 
 export function serialize(node: Child): Node {
@@ -45,41 +61,34 @@ export function serialize(node: Child): Node {
   return { t: node.type, a: { ...node.attrs }, c: node.children.map(serialize) } satisfies Element;
 }
 
-function containerOf(node: Child): Container | null {
-  let p = node.parent;
-  while (p && !isContainer(p)) p = p.parent;
-  return p;
-}
-
 function insert(parent: Parent, child: Child, index: number) {
   parent.children.splice(index, 0, child);
   child.parent = parent;
   if (isContainer(parent)) {
-    if (parent.children.length > 1) throw new Error("chouquette renders one root element per window");
-    parent.ops.push({ op: "replace", at: [], node: serialize(child) });
+    if (parent.kind === "root" && parent.children.length > 1) throw new Error("chouquette renders one root element per window");
+    record(parent, { op: "replace", at: [], node: serialize(child) });
     return;
   }
-  const at = path(parent);
-  if (at) containerOf(parent)!.ops.push({ op: "splice", at, start: index, delete: 0, c: [serialize(child)] });
+  const where = locate(parent);
+  if (where) record(where.container, { op: "splice", at: where.at, start: index, delete: 0, c: [serialize(child)] });
 }
 
 function remove(parent: Parent, child: Child) {
   const index = parent.children.indexOf(child);
-  const container = isContainer(parent) ? parent : containerOf(parent);
-  const at = isContainer(parent) ? [] : path(parent);
+  const where = isContainer(parent) ? { container: parent, at: [] } : locate(parent);
   parent.children.splice(index, 1);
   child.parent = null;
-  if (!container || !at) return;
-  if (isContainer(parent)) container.ops.push({ op: "replace", at: [], node: null });
-  else container.ops.push({ op: "splice", at, start: index, delete: 1, c: [] });
+  if (!where) return;
+  if (isContainer(parent)) record(where.container, { op: "replace", at: [], node: null });
+  else record(where.container, { op: "splice", at: where.at, start: index, delete: 1, c: [] });
 }
 
 const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /**
- * Merges ops into baguette's canonical patch: a removal and insertion at one
- * index is a replace, inserts in a row are one splice, and a later replace
- * of the same node wins.
+ * Merges ops into the canonical patch: a removal and insertion at one index
+ * is a replace, inserts in a row are one splice, and a later replace of the
+ * same node wins.
  */
 export function coalesce(ops: Op[]): Op[] {
   const out: Op[] = [];
@@ -121,9 +130,10 @@ export const reconciler = Reconciler({
   supportsMicrotasks: true,
   scheduleMicrotask: queueMicrotask,
 
-  createInstance(type: string, props: Record<string, unknown>, root: Container): Instance {
+  createInstance(type: string, props: Record<string, unknown>, container: Container): Instance {
+    const root = rootOf(container);
     const id = `h${root.nextId++}`;
-    const inst: Instance = { type, props, attrs: toAttrs(props, id), children: [], parent: null, id, root };
+    const inst: Instance = { type, props, attrs: toAttrs(type, props, id), children: [], parent: null, id, root };
     root.handlers.set(id, inst);
     return inst;
   },
@@ -139,9 +149,12 @@ export const reconciler = Reconciler({
   getPublicInstance: (inst: Child) => inst,
   prepareForCommit: () => null,
   resetAfterCommit(container: Container) {
-    const ops = coalesce(container.ops);
-    container.ops = [];
-    container.commit(ops, container.children[0] ? serialize(container.children[0]) : null);
+    const root = rootOf(container);
+    const ops = coalesce(root.ops);
+    const rows = [...root.dirty];
+    root.ops = [];
+    root.dirty.clear();
+    root.commit(ops, rows);
   },
   preparePortalMount: noop,
   clearContainer(container: Container) {
@@ -156,17 +169,17 @@ export const reconciler = Reconciler({
   removeChildFromContainer: remove,
   commitTextUpdate(text: TextInstance, _old: string, next: string) {
     text.text = next;
-    const at = path(text);
-    if (at) containerOf(text)!.ops.push({ op: "replace", at, node: next });
+    const where = locate(text);
+    if (where) record(where.container, { op: "replace", at: where.at, node: next });
   },
-  commitUpdate(inst: Instance, _type: string, _prev: unknown, next: Record<string, unknown>) {
+  commitUpdate(inst: Instance, type: string, _prev: unknown, next: Record<string, unknown>) {
     inst.props = next;
-    const attrs = toAttrs(next, inst.id);
+    const attrs = toAttrs(type, next, inst.id);
     const keys = Object.keys(attrs);
     if (keys.length === Object.keys(inst.attrs).length && keys.every(k => attrs[k] === inst.attrs[k])) return;
     inst.attrs = attrs;
-    const at = path(inst);
-    if (at) containerOf(inst)!.ops.push({ op: "attrs", at, a: { ...attrs } });
+    const where = locate(inst);
+    if (where) record(where.container, { op: "attrs", at: where.at, a: { ...attrs } });
   },
   resetTextContent: noop,
   detachDeletedInstance: (inst: Instance) => inst.root.handlers.delete(inst.id),

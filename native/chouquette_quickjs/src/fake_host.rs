@@ -10,6 +10,7 @@ use levain::levain_abi::{EventSink, HostApi};
 #[derive(Default)]
 pub struct FakeHost {
     pub renders: Mutex<Vec<(u32, String)>>,
+    pub calls: Mutex<Vec<String>>,
     sink: Mutex<Option<EventSink>>,
 }
 
@@ -59,4 +60,12 @@ extern "C" fn set_event_sink(ctx: *mut c_void, sink: EventSink) {
 extern "C" fn check_components(_: *mut c_void, _: *const u8, _: usize) -> bool {
     true
 }
-extern "C" fn call(_: *mut c_void, _: *const u8, _: usize) {}
+extern "C" fn call(ctx: *mut c_void, json: *const u8, len: usize) {
+    // SAFETY: valid for `len` bytes for this call.
+    let json = unsafe { std::slice::from_raw_parts(json, len) };
+    host(ctx)
+        .calls
+        .lock()
+        .unwrap()
+        .push(String::from_utf8(json.to_vec()).unwrap());
+}

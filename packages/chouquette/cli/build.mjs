@@ -31,7 +31,7 @@ export async function build({ dir, out = join(dir, "dist"), minify = false }) {
     logLevel: "warning",
   });
 
-  const app = { name: pkg.name, window: config.window ?? {} };
+  const app = { name: pkg.name, window: config.window ?? {}, ...(config.cli && { cli: config.cli }) };
   writeFileSync(join(out, "app.json"), JSON.stringify(app, null, 2) + "\n");
   return { out };
 }

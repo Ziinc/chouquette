@@ -49,7 +49,7 @@ test("every fixture has a case", () => {
 for (const fixture of fixtures as Fixture[]) {
   test(fixture.name, () => {
     const frames: Frame[] = [];
-    const root = createRoot({ window: 0 }, { send: (_w, json) => frames.push(JSON.parse(json)), onEvent: () => {} });
+    const root = createRoot({ window: 0 }, { send: (_w, json) => frames.push(JSON.parse(json)), onEvent: () => {}, call() {} });
     const [oldEl, newEl] = cases[fixture.name];
 
     root.render(oldEl);

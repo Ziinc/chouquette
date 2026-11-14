@@ -70,6 +70,7 @@ pub fn locate_in(dirs: &[PathBuf]) -> Result<App, String> {
         root: root.clone(),
         name: app_name(&json, root),
         window: WindowConfig::from_app_json(&json),
+        cli: levain::cli_from_app_json(&json),
     })
 }
 
@@ -95,7 +96,7 @@ mod tests {
         std::fs::write(app.path().join("app.js"), "").unwrap();
         std::fs::write(
             app.path().join("app.json"),
-            r#"{"name": "counter", "window": {"title": "Counter", "width": 360}}"#,
+            r#"{"name": "counter", "window": {"title": "Counter", "width": 360}, "cli": {"description": "Counts"}}"#,
         )
         .unwrap();
 
@@ -104,6 +105,10 @@ mod tests {
         assert_eq!(found.name, "counter");
         assert_eq!(found.window.title.as_deref(), Some("Counter"));
         assert_eq!((found.window.width, found.window.height), (360.0, 360.0));
+        assert_eq!(
+            found.cli,
+            Some(serde_json::json!({"description": "Counts"}))
+        );
     }
 
     #[test]
