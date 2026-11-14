@@ -1,0 +1,128 @@
+name: store
+
+# An example app as store builds: a signed AAB to Google Play's internal
+# testing track and an IPA to TestFlight. Manual, or with a release tag.
+# Each upload runs only when its secrets are set:
+#   Android: ANDROID_KEYSTORE (base64), ANDROID_KEYSTORE_PASSWORD,
+#            ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, PLAY_SERVICE_ACCOUNT_JSON
+#   iOS:     APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
+#            APPLE_PROVISIONING_PROFILE (base64), APPLE_TEAM_ID,
+#            APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID,
+#            APP_STORE_CONNECT_KEY (the .p8)
+on:
+  workflow_dispatch:
+    inputs:
+      example:
+        description: The example to release
+        default: counter
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  LEVAIN_REV: 53738e5a7cfcc5d6275b2b3c79c31ca81464c5c7
+  EXAMPLE: ${{ inputs.example || 'counter' }}
+
+jobs:
+  play:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      NDK_VERSION: 27.2.12479018
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE != '' }}
+      HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install NDK and levain-pack
+        run: |
+          sdkmanager --install "ndk;$NDK_VERSION"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          cargo install --git https://github.com/Ziinc/levain --rev "$LEVAIN_REV" levain-pack --locked
+      - run: npm ci
+      # levain-pack signs with <PREFIX>_KEYSTORE and friends, read by Gradle.
+      - name: The signing key
+        if: env.HAS_KEY == 'true'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "CHOUQUETTE_SIGNING_ENV=STORE_ANDROID"
+            echo "STORE_ANDROID_KEYSTORE=$RUNNER_TEMP/release.jks"
+            echo "STORE_ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+            echo "STORE_ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}"
+            echo "STORE_ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}"
+          } >> "$GITHUB_ENV"
+      - name: The AAB
+        working-directory: examples/${{ env.EXAMPLE }}
+        run: npx chouquette build --target android-arm64 --release --out "$RUNNER_TEMP/play"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.EXAMPLE }}-aab
+          path: ${{ runner.temp }}/play
+      - name: Google Play, internal testing
+        if: env.HAS_KEY == 'true' && env.HAS_PLAY == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.example.${{ env.EXAMPLE }}
+          releaseFiles: ${{ runner.temp }}/play/${{ env.EXAMPLE }}.aab
+          track: internal
+
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+      HAS_ASC: ${{ secrets.APP_STORE_CONNECT_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - name: Install xcodegen and levain-pack
+        run: |
+          brew install xcodegen
+          cargo install --git https://github.com/Ziinc/levain --rev "$LEVAIN_REV" levain-pack --locked
+      - run: npm ci
+      # Tauri's iOS build signs with these (its documented variables).
+      - name: The signing certificate and profile
+        if: env.HAS_CERT == 'true'
+        run: |
+          {
+            echo "IOS_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}"
+            echo "IOS_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}"
+            echo "IOS_MOBILE_PROVISION=${{ secrets.APPLE_PROVISIONING_PROFILE }}"
+            echo "APPLE_DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }}"
+          } >> "$GITHUB_ENV"
+      - name: The IPA
+        if: env.HAS_CERT == 'true'
+        working-directory: examples/${{ env.EXAMPLE }}
+        run: npx chouquette build --target ios --release --out "$RUNNER_TEMP/testflight"
+      - name: TestFlight
+        if: env.HAS_CERT == 'true' && env.HAS_ASC == 'true'
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "${{ secrets.APP_STORE_CONNECT_KEY }}" > ~/.appstoreconnect/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
+          xcrun altool --upload-app --type ios --file "$RUNNER_TEMP/testflight/$EXAMPLE.ipa" \
+            --apiKey "${{ secrets.APP_STORE_CONNECT_KEY_ID }}" --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
