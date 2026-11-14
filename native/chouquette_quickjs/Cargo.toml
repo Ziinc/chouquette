@@ -14,3 +14,7 @@ serde_json = "1"
 
 [dev-dependencies]
 tempfile = "3"
+
+# rquickjs ships prebuilt bindings for desktops only: phones generate theirs.
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+rquickjs = { version = "0.14", features = ["bindgen"] }

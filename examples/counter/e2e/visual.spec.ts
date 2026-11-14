@@ -1,7 +1,8 @@
 import { test } from "@playwright/test";
 import { expectToLook } from "chouquette/playwright";
 
-test("the counter looks as it should", async ({ page }) => {
+// gpui-playwright takes screenshots on Linux only, so far.
+test("the counter looks as it should @screenshot", async ({ page }) => {
   await page.getByRole("button", { name: "Increment" }).click();
   await expectToLook(page, "counter", [
     "Large bold text reads 'Count: ' followed by a number of 1 or more",

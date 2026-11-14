@@ -14,6 +14,8 @@ export function e2eConfig({ dir, port = process.env.GPUI_PLAYWRIGHT_PORT ?? "933
     // One app, one window: tests share it and run one at a time.
     workers: 1,
     fullyParallel: false,
+    // gpui-playwright renders screenshots on Linux only so far.
+    grepInvert: process.platform === "linux" ? undefined : /@screenshot/,
     use: { connectOptions: { wsEndpoint: `ws://127.0.0.1:${port}/` } },
     webServer: {
       command: host,
