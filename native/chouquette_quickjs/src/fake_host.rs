@@ -11,6 +11,8 @@ use levain::levain_abi::{EventSink, HostApi};
 pub struct FakeHost {
     pub renders: Mutex<Vec<(u32, String)>>,
     pub calls: Mutex<Vec<String>>,
+    /// The component sets this host has, as `check_components` compares them.
+    pub components: Mutex<String>,
     sink: Mutex<Option<EventSink>>,
 }
 
@@ -57,8 +59,11 @@ extern "C" fn render(ctx: *mut c_void, window: u32, json: *const u8, len: usize)
 extern "C" fn set_event_sink(ctx: *mut c_void, sink: EventSink) {
     *host(ctx).sink.lock().unwrap() = Some(sink);
 }
-extern "C" fn check_components(_: *mut c_void, _: *const u8, _: usize) -> bool {
-    true
+extern "C" fn check_components(ctx: *mut c_void, json: *const u8, len: usize) -> bool {
+    // SAFETY: valid for `len` bytes for this call.
+    let json = unsafe { std::slice::from_raw_parts(json, len) };
+    let ours = host(ctx).components.lock().unwrap();
+    ours.is_empty() || ours.as_bytes() == json
 }
 extern "C" fn call(ctx: *mut c_void, json: *const u8, len: usize) {
     // SAFETY: valid for `len` bytes for this call.

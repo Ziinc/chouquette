@@ -5,12 +5,14 @@
   const render = g.__chouquette_render;
   const log = g.__chouquette_log;
   const call = g.__chouquette_call;
+  const checkComponents = g.__chouquette_check_components;
   const listeners = [];
 
   g.__chouquette_host = {
     send: (window, json) => render(window, json),
     onEvent: listener => void listeners.push(listener),
     call: json => call(json),
+    checkComponents: json => checkComponents(json),
   };
 
   const report = error => log(error && error.stack ? `${error}\n${error.stack}` : String(error));

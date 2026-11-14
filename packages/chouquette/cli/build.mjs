@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import * as esbuild from "esbuild";
+import { hashes } from "./components.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -13,6 +14,10 @@ export async function build({ dir, out = join(dir, "dist"), minify = false }) {
   const config = JSON.parse(readFileSync(join(dir, "chouquette.json"), "utf8"));
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
   mkdirSync(out, { recursive: true });
+  // The native component sets the app uses; the runtime checks them against the host's.
+  const sets = (config.components ?? ["gpui-kit"]).map(set =>
+    JSON.parse(readFileSync(join(import.meta.dirname, "../components", `${set}.json`), "utf8")),
+  );
 
   await esbuild.build({
     entryPoints: [join(dir, config.entry ?? "src/app.tsx")],
@@ -28,6 +33,7 @@ export async function build({ dir, out = join(dir, "dist"), minify = false }) {
     // Where chouquette's own dependencies are, for when npm didn't hoist them.
     nodePaths: [join(dirname(require.resolve("@chouquette/react-dom/package.json")), "../..")],
     define: { "process.env.NODE_ENV": JSON.stringify(minify ? "production" : "development") },
+    banner: { js: `globalThis.__chouquette_components = ${JSON.stringify(hashes(sets))};` },
     logLevel: "warning",
   });
 

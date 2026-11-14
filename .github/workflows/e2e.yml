@@ -60,6 +60,17 @@ jobs:
               else npx playwright test --trace off; fi)
             echo "::endgroup::"
           done
+      # An app built against other native components than the host has is refused.
+      - name: A mismatched component set is refused
+        if: runner.os == 'Linux'
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
+        run: |
+          cp -r examples/gallery/dist "$RUNNER_TEMP/mismatch"
+          sed -i 's/"gpui-kit":"[0-9a-f]*"/"gpui-kit":"0000000000000000"/' "$RUNNER_TEMP/mismatch/app.js"
+          CHOUQUETTE_APP="$RUNNER_TEMP/mismatch" timeout 30 xvfb-run -a native/target/debug/chouquette_host > mismatch.log 2>&1 || true
+          cat mismatch.log
+          grep -q "compiled against other native components (gpui-kit)" mismatch.log
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

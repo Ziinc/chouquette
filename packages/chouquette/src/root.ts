@@ -17,7 +17,19 @@ export type Theme = Record<string, string | { light: string; dark: string }>;
 
 export type RootOptions = { window: number; theme?: Theme };
 
+const checked = new WeakSet<Transport>();
+
+/** Sends the app's component sets (`chouquette build` defines them) to the host, once. */
+function checkComponents(transport: Transport) {
+  const sets = (globalThis as { __chouquette_components?: Record<string, string> }).__chouquette_components;
+  if (!sets || checked.has(transport)) return;
+  checked.add(transport);
+  if (transport.checkComponents?.(JSON.stringify(sets)) === false)
+    console.error("chouquette: the host's native component sets differ from the app's; rebuild against this host");
+}
+
 export function createRoot({ window, theme }: RootOptions, transport: Transport = getHost()): Root {
+  checkComponents(transport);
   let sent = false;
   let full = false;
   let appearance: Appearance = "light";

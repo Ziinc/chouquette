@@ -1,3 +1,4 @@
+/// <reference path="./components/gpui-kit.d.ts" />
 // The props levain's elements take beyond the DOM's.
 import type { HostSyntheticEvent } from "./events";
 

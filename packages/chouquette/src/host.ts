@@ -10,6 +10,12 @@ export type Transport = {
   onEvent(listener: (event: HostEvent) => void): void;
   /** A platform call, `{"call", "ref", "args"}`; the host answers with a `reply` event. */
   call(json: string): void;
+  /**
+   * Checks the native component sets the app was built against (`{set:
+   * hash}`) against the host's; on a mismatch the host shows why and
+   * ignores renders.
+   */
+  checkComponents?(json: string): boolean;
 };
 
 let current: Transport | undefined;

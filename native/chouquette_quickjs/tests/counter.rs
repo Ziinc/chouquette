@@ -32,10 +32,7 @@ fn counter_renders_and_counts_clicks() {
     let (window, frame) = &renders[0];
     let frame: serde_json::Value = serde_json::from_str(frame).unwrap();
     assert_eq!(*window, 0);
-    assert_eq!(
-        frame["root"]["c"][0]["c"],
-        serde_json::json!(["Count: 0"])
-    );
+    assert_eq!(frame["root"]["c"][0]["c"], serde_json::json!(["Count: 0"]));
     let button = frame["root"]["c"][1]["a"]["phx-click"].as_str().unwrap();
 
     host.send(levain::events::input(

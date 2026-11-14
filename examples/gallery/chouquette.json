@@ -1,0 +1,7 @@
+{
+  "entry": "src/app.tsx",
+  "runtime": "quickjs",
+  "identifier": "com.example.gallery",
+  "components": ["gpui-kit"],
+  "window": { "title": "Gallery", "width": 720, "height": 760 }
+}

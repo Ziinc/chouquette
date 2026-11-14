@@ -41,6 +41,9 @@ impl Engine {
             let call = Function::new(ctx.clone(), move |json: String| {
                 (api.call)(api.ctx, json.as_ptr(), json.len());
             });
+            let check = Function::new(ctx.clone(), move |json: String| -> bool {
+                (api.check_components)(api.ctx, json.as_ptr(), json.len())
+            });
             let log = Function::new(ctx.clone(), |line: String| levain::log_line(&line));
             globals
                 .set("__chouquette_render", render)
@@ -48,6 +51,10 @@ impl Engine {
                 .map_err(|e| e.to_string())?;
             globals
                 .set("__chouquette_call", call)
+                .catch(&ctx)
+                .map_err(|e| e.to_string())?;
+            globals
+                .set("__chouquette_check_components", check)
                 .catch(&ctx)
                 .map_err(|e| e.to_string())?;
             globals
@@ -191,6 +198,20 @@ mod tests {
             *host.calls.lock().unwrap(),
             [r#"{"call":"clipboard.read","ref":1,"args":{}}"#]
         );
+    }
+
+    #[test]
+    fn component_sets_are_checked_by_the_host() {
+        let (api, host) = FakeHost::api();
+        *host.components.lock().unwrap() = r#"{"gpui-kit":"aaaa"}"#.into();
+        let mut engine = Engine::new(api).unwrap();
+        engine
+            .eval(
+                r#"__chouquette_host.send(0, String(__chouquette_host.checkComponents('{"gpui-kit":"aaaa"}')));
+                   __chouquette_host.send(0, String(__chouquette_host.checkComponents('{"gpui-kit":"bbbb"}')));"#,
+            )
+            .unwrap();
+        assert_eq!(host.take(), [(0, "true".into()), (0, "false".into())]);
     }
 
     #[test]
