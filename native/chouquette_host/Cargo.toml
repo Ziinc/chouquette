@@ -8,10 +8,10 @@ publish = false
 description = "levain's host with the QuickJS runtime: runs chouquette apps"
 
 [lib]
-# `cdylib` is what Android loads; `staticlib` is what Xcode links for iOS;
-# `rlib` is what the desktop executable uses.
+# `cdylib` is what Android loads; `rlib` is what the desktop executable and
+# the iOS wrapper (`chouquette_ios`, the static library Xcode links) use.
 name = "chouquette_host_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 # Serves the app's windows to Playwright clients (gpui-playwright) when
@@ -26,3 +26,6 @@ tauri = { version = "2.12", default-features = false, features = ["unstable", "w
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"

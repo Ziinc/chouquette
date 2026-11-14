@@ -1,0 +1,156 @@
+name: release
+
+# A tag `v*` publishes chouquette, @chouquette/react-dom and the six desktop
+# hosts to npm, and the hosts to a GitHub release with their SHA-256s. A
+# manual run does everything but publish, as a dry run.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  LEVAIN_REV: 53738e5a7cfcc5d6275b2b3c79c31ca81464c5c7
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else echo "version=0.0.0-dry.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"; fi
+
+  hosts:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, os: ubuntu-24.04 }
+          - { target: linux-arm64, os: ubuntu-24.04-arm }
+          - { target: darwin-arm64, os: macos-15 }
+          - { target: darwin-x64, os: macos-15-intel }
+          - { target: win32-x64, os: windows-2025 }
+          - { target: win32-arm64, os: windows-11-arm }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+          key: dist-${{ matrix.target }}
+      - name: System dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev \
+            libssl-dev libxkbcommon-dev libxkbcommon-x11-dev libvulkan-dev libwayland-dev \
+            libx11-xcb-dev libfontconfig-dev libfreetype-dev libgbm-dev libegl-dev libxrandr-dev clang
+      - name: Build the host
+        run: cargo build -p chouquette_host --profile dist
+        working-directory: native
+      - name: Build levain-pack
+        run: cargo install --git https://github.com/Ziinc/levain --rev "$LEVAIN_REV" levain-pack --locked --root "$RUNNER_TEMP/levain"
+      - name: Pack @chouquette/host-${{ matrix.target }}
+        run: |
+          exe=$([ "$RUNNER_OS" = Windows ] && echo .exe || true)
+          node scripts/pack-host.mjs ${{ matrix.target }} ${{ needs.version.outputs.version }} \
+            "native/target/dist/chouquette_host$exe" "$RUNNER_TEMP/levain/bin/levain-pack$exe" "host-${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: host-${{ matrix.target }}
+          path: host-${{ matrix.target }}
+
+  # The M4 gate: an app bundles from the packages as npm would serve them.
+  # Not yet without Rust: levain-pack bundles through Tauri's CLI, which runs
+  # `cargo metadata` and `rustc -vV` though it compiles nothing. Once
+  # levain-pack calls the bundler as a library, turn `no-rust` on.
+  ship:
+    needs: [version, hosts]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: host-linux-x64
+          path: host-linux-x64
+      - name: No Rust here
+        if: false # see above
+        run: |
+          echo "PATH=$(echo "$PATH" | tr ':' '\n' | grep -v -e cargo -e rustup | paste -sd:)" >> "$GITHUB_ENV"
+          sudo rm -rf /usr/local/cargo /usr/local/rustup ~/.cargo ~/.rustup
+      - name: Pack chouquette as npm would serve it
+        run: |
+          node scripts/set-version.mjs ${{ needs.version.outputs.version }}
+          chmod +x host-linux-x64/bin/*
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          for p in packages/chouquette packages/react-dom host-linux-x64; do npm pack "./$p" --pack-destination "$RUNNER_TEMP/tarballs"; done
+      - name: Bundle the counter
+        run: |
+          app="$RUNNER_TEMP/counter"
+          mkdir -p "$app" && cp -r examples/counter/src examples/counter/chouquette.json "$app/"
+          cd "$app"
+          t="$RUNNER_TEMP/tarballs"
+          cat > package.json <<JSON
+          {"name": "counter", "version": "1.0.0", "private": true, "type": "module",
+           "dependencies": {"chouquette": "file:$(ls $t/chouquette-[0-9]*.tgz)", "react": "^19.3.0"},
+           "overrides": {"@chouquette/react-dom": "file:$(ls $t/chouquette-react-dom-*.tgz)",
+                         "@chouquette/host-linux-x64": "file:$(ls $t/chouquette-host-linux-x64-*.tgz)"}}
+          JSON
+          npm install --no-audit --no-fund
+          npx chouquette bundle --bundles deb
+          deb=$(ls dist/bundle/deb/*.deb)
+          dpkg -c "$deb" | tee contents.txt
+          grep -q "app/app.qjsbc" contents.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: counter-deb
+          path: ${{ runner.temp }}/counter/dist/bundle/deb
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, hosts, ship]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: host-*
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          node scripts/set-version.mjs ${{ needs.version.outputs.version }}
+          for host in host-*/; do chmod +x "$host"bin/*; npm publish "./$host" --access public --provenance; done
+          npm publish ./packages/react-dom --access public --provenance
+          npm publish ./packages/chouquette --access public --provenance
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir assets
+          for host in host-*/; do tar czf "assets/${host%/}.tar.gz" -C "$host" .; done
+          (cd assets && sha256sum * > sha256sums.txt)
+          gh release create "$GITHUB_REF_NAME" assets/* --generate-notes

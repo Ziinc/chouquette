@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createContext, runInContext } from "node:vm";
@@ -34,4 +34,15 @@ test("a declared cli goes into app.json", async () => {
   writeFileSync(join(dir, "app.ts"), "export {};\n");
   await build({ dir, out: join(dir, "dist") });
   expect(JSON.parse(readFileSync(join(dir, "dist/app.json"), "utf8"))).toEqual({ name: "adder", window: {}, cli: cliSpec });
+});
+
+test("with a host, the app ships as the host's bytecode", async () => {
+  const out = mkdtempSync(join(tmpdir(), "chouquette-bc-"));
+  // Stands in for `chouquette_host --compile <app.js> <app.qjsbc>`.
+  const host = join(out, "host.sh");
+  writeFileSync(host, '#!/bin/sh\n[ "$1" = --compile ] && printf bytecode > "$3"\n');
+  chmodSync(host, 0o755);
+  await build({ dir: counter, out: join(out, "app"), host });
+  expect(readdirSync(join(out, "app")).sort()).toEqual(["app.json", "app.qjsbc"]);
+  expect(readFileSync(join(out, "app/app.qjsbc"), "utf8")).toBe("bytecode");
 });

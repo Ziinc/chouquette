@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::time::Duration;
 
 use levain::levain_abi::{EventSink, HostApi};
-use rquickjs::{CatchResultExt, Context, Function, Runtime};
+use rquickjs::{CatchResultExt, Context, Function, Module, Runtime, WriteOptions};
 
 const PRELUDE: &str = include_str!("prelude.js");
 
@@ -83,9 +83,32 @@ impl Engine {
         Ok(())
     }
 
-    /// Runs `source`, then handles events and timers for as long as the host runs.
-    pub fn run(&mut self, source: &str) -> Result<(), String> {
-        self.eval(source)?;
+    /// Runs an app compiled by [`compile`].
+    pub fn eval_bytecode(&mut self, bytecode: &[u8]) -> Result<(), String> {
+        self.context.with(|ctx| {
+            // SAFETY: the bytes come from `compile`, by this same QuickJS:
+            // `chouquette build` compiles with the host it ships.
+            let module = unsafe { Module::load(ctx.clone(), bytecode) }
+                .catch(&ctx)
+                .map_err(|e| e.to_string())?;
+            let (_, done) = module.eval().catch(&ctx).map_err(|e| e.to_string())?;
+            done.finish::<()>().catch(&ctx).map_err(|e| e.to_string())
+        })?;
+        self.jobs();
+        Ok(())
+    }
+
+    /// Runs `code`: bytecode or a script.
+    pub fn load(&mut self, code: &crate::Code) -> Result<(), String> {
+        match code {
+            crate::Code::Bytecode(bytes) => self.eval_bytecode(bytes),
+            crate::Code::Script(source) => self.eval(source),
+        }
+    }
+
+    /// Runs `code`, then handles events and timers for as long as the host runs.
+    pub fn run(&mut self, code: &crate::Code) -> Result<(), String> {
+        self.load(code)?;
         loop {
             self.turn(None);
         }
@@ -157,6 +180,25 @@ impl Engine {
     }
 }
 
+/// QuickJS bytecode for an app's script, which [`Engine::eval_bytecode`]
+/// runs: no parsing at startup. It runs as a module (strict mode).
+pub fn compile(source: &str) -> Result<Vec<u8>, String> {
+    let runtime = Runtime::new().map_err(|e| e.to_string())?;
+    let context = Context::full(&runtime).map_err(|e| e.to_string())?;
+    context.with(|ctx| {
+        Module::declare(ctx.clone(), "app.js", source)
+            .and_then(|module| {
+                // No source text: errors keep their line numbers.
+                module.write(WriteOptions {
+                    strip_source: true,
+                    ..WriteOptions::default()
+                })
+            })
+            .catch(&ctx)
+            .map_err(|e| e.to_string())
+    })
+}
+
 /// The host's event sink: hands each event to the JS thread.
 extern "C" fn on_event(ctx: *mut c_void, json: *const u8, len: usize) {
     // SAFETY: `ctx` is the `Sender` leaked in `Engine::new`; the host passes
@@ -212,6 +254,21 @@ mod tests {
             )
             .unwrap();
         assert_eq!(host.take(), [(0, "true".into()), (0, "false".into())]);
+    }
+
+    #[test]
+    fn bytecode_runs_as_its_source_does() {
+        let bytecode = crate::compile("__chouquette_host.send(3, 'from bytecode')").unwrap();
+        let (api, host) = FakeHost::api();
+        let mut engine = Engine::new(api).unwrap();
+        engine.eval_bytecode(&bytecode).unwrap();
+        assert_eq!(host.take(), [(3, "from bytecode".into())]);
+    }
+
+    #[test]
+    fn a_compile_error_is_reported() {
+        let error = crate::compile("let = ;").unwrap_err();
+        assert!(error.contains("app.js:1"), "{error}");
     }
 
     #[test]

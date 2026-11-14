@@ -8,7 +8,7 @@ mod fake_host;
 
 use std::path::{Path, PathBuf};
 
-pub use engine::Engine;
+pub use engine::{Engine, compile};
 use levain::{App, AppPaths, Runtime, WindowConfig};
 
 /// The QuickJS runtime.
@@ -21,18 +21,85 @@ impl Runtime for QuickJs {
     }
 
     fn start(&self, app: App, api: &'static levain::levain_abi::HostApi) -> Result<(), String> {
-        let path = app.root.join("app.js");
-        let source =
-            std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let code = Code::read(&app.root)?;
+        let dev = std::env::var_os("CHOUQUETTE_DEV").is_some();
         std::thread::Builder::new()
             .name("chouquette-js".into())
             .spawn(move || {
-                if let Err(error) = Engine::new(api).and_then(|mut engine| engine.run(&source)) {
+                let result = if dev {
+                    run_dev(api, &app.root)
+                } else {
+                    Engine::new(api).and_then(|mut engine| engine.run(&code))
+                };
+                if let Err(error) = result {
                     levain::log_line(&format!("chouquette: {error}"));
                 }
             })
             .map(drop)
             .map_err(|e| e.to_string())
+    }
+}
+
+/// `chouquette dev`: runs the app and, whenever its `app.js` changes, runs
+/// the new one in a fresh context, which renders its windows afresh.
+fn run_dev(api: &'static levain::levain_abi::HostApi, root: &Path) -> Result<(), String> {
+    let mut watch = Watch::new(&root.join("app.js"));
+    loop {
+        let mut engine = Engine::new(api)?;
+        if let Err(error) = Code::read(root).and_then(|code| engine.load(&code)) {
+            levain::log_line(&format!("chouquette: {error}"));
+        }
+        levain::log_line("chouquette: app loaded");
+        while !watch.changed() {
+            engine.turn(Some(std::time::Duration::from_millis(250)));
+        }
+    }
+}
+
+/// Whether a file changed since last asked, by its modification time.
+struct Watch {
+    path: PathBuf,
+    stamp: Option<std::time::SystemTime>,
+}
+
+impl Watch {
+    fn new(path: &Path) -> Self {
+        let stamp = Self::stamp(path);
+        Self {
+            path: path.into(),
+            stamp,
+        }
+    }
+
+    fn stamp(path: &Path) -> Option<std::time::SystemTime> {
+        std::fs::metadata(path).and_then(|m| m.modified()).ok()
+    }
+
+    fn changed(&mut self) -> bool {
+        let now = Self::stamp(&self.path);
+        now != self.stamp && std::mem::replace(&mut self.stamp, now) != now
+    }
+}
+
+/// An app's code: bytecode from `chouquette build --release`, else its script.
+pub enum Code {
+    Bytecode(Vec<u8>),
+    Script(String),
+}
+
+impl Code {
+    pub fn read(root: &Path) -> Result<Self, String> {
+        let read = |name: &str| {
+            let path = root.join(name);
+            std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
+        };
+        if root.join("app.qjsbc").is_file() {
+            return read("app.qjsbc").map(Code::Bytecode);
+        }
+        let source = read("app.js")?;
+        String::from_utf8(source)
+            .map(Code::Script)
+            .map_err(|e| format!("app.js: {e}"))
     }
 }
 
@@ -59,9 +126,12 @@ fn candidates(paths: &AppPaths) -> Result<Vec<PathBuf>, String> {
     Ok(dirs)
 }
 
-/// The first of `dirs` that holds an `app.js`, with its `app.json`.
+/// The first of `dirs` that holds an `app.qjsbc` or `app.js`, with its `app.json`.
 pub fn locate_in(dirs: &[PathBuf]) -> Result<App, String> {
-    let Some(root) = dirs.iter().find(|dir| dir.join("app.js").is_file()) else {
+    let Some(root) = dirs
+        .iter()
+        .find(|dir| dir.join("app.qjsbc").is_file() || dir.join("app.js").is_file())
+    else {
         let looked: Vec<String> = dirs.iter().map(|d| d.display().to_string()).collect();
         return Err(format!("no app.js in {}", looked.join(", ")));
     };
@@ -109,6 +179,41 @@ mod tests {
             found.cli,
             Some(serde_json::json!({"description": "Counts"}))
         );
+    }
+
+    #[test]
+    fn an_app_may_ship_only_bytecode() {
+        let app = tempfile::tempdir().unwrap();
+        std::fs::write(app.path().join("app.qjsbc"), b"").unwrap();
+        assert_eq!(locate_in(&[app.path().into()]).unwrap().root, app.path());
+    }
+
+    #[test]
+    fn dev_mode_notices_a_new_bundle() {
+        let app = tempfile::tempdir().unwrap();
+        let path = app.path().join("app.js");
+        std::fs::write(&path, "1").unwrap();
+        let mut watch = Watch::new(&path);
+        assert!(!watch.changed());
+        let file = std::fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5))
+            .unwrap();
+        assert!(watch.changed());
+        assert!(!watch.changed());
+    }
+
+    #[test]
+    fn a_reloaded_engine_takes_the_events() {
+        let (api, host) = crate::fake_host::FakeHost::api();
+        let listen = "__chouquette_host.onEvent(e => __chouquette_host.send(0, NAME))";
+        let mut first = Engine::new(api).unwrap();
+        first.eval(&listen.replace("NAME", "'first'")).unwrap();
+        let mut second = Engine::new(api).unwrap();
+        second.eval(&listen.replace("NAME", "'second'")).unwrap();
+        drop(first);
+        host.send(levain::events::resync(0));
+        assert!(second.turn(Some(std::time::Duration::ZERO)));
+        assert_eq!(host.take(), [(0, "second".into())]);
     }
 
     #[test]

@@ -25,5 +25,19 @@
     "@playwright/test": {
       "optional": true
     }
-  }
+  },
+  "optionalDependencies": {
+    "@chouquette/host-linux-x64": "0.0.0",
+    "@chouquette/host-linux-arm64": "0.0.0",
+    "@chouquette/host-darwin-arm64": "0.0.0",
+    "@chouquette/host-darwin-x64": "0.0.0",
+    "@chouquette/host-win32-x64": "0.0.0",
+    "@chouquette/host-win32-arm64": "0.0.0"
+  },
+  "files": [
+    "bin",
+    "cli",
+    "components",
+    "src"
+  ]
 }

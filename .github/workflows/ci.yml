@@ -58,9 +58,9 @@ jobs:
       - if: runner.os == 'Linux'
         run: cargo fmt --all --check
         working-directory: native
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --all-targets -- -D warnings
         working-directory: native
-      - run: cargo test --workspace
+      - run: cargo test
         working-directory: native
 
   # Phones run no tests here yet: the host must build for them.
@@ -80,7 +80,7 @@ jobs:
           workspaces: native
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo build -p chouquette_host --lib --target ${{ matrix.target }}
+      - run: cargo build -p chouquette_ios --target ${{ matrix.target }}
         working-directory: native
 
   android:

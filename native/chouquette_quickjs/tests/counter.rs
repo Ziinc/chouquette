@@ -9,24 +9,39 @@ use chouquette_quickjs::Engine;
 #[path = "../src/fake_host.rs"]
 mod fake;
 
-#[test]
-fn counter_renders_and_counts_clicks() {
+/// The counter's bundle, from `chouquette build --release`.
+fn bundle() -> String {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let out = tempfile::tempdir().unwrap();
     let status = Command::new("node")
         .arg(repo.join("packages/chouquette/bin/chouquette.mjs"))
-        .args(["build", "--release", "--out"])
+        .args(["build", "--release", "--script", "--out"])
         .arg(out.path())
         .current_dir(repo.join("examples/counter"))
         .status()
         .expect("node (run npm install at the repo root first)");
     assert!(status.success(), "chouquette build failed");
-    let source = std::fs::read_to_string(out.path().join("app.js")).unwrap();
+    std::fs::read_to_string(out.path().join("app.js")).unwrap()
+}
 
+#[test]
+fn counter_renders_and_counts_clicks() {
     let (api, host) = fake::FakeHost::api();
     let mut engine = Engine::new(api).unwrap();
-    engine.eval(&source).unwrap();
+    engine.eval(&bundle()).unwrap();
+    counts(&mut engine, host);
+}
 
+#[test]
+fn counter_runs_from_bytecode() {
+    let bytecode = chouquette_quickjs::compile(&bundle()).unwrap();
+    let (api, host) = fake::FakeHost::api();
+    let mut engine = Engine::new(api).unwrap();
+    engine.eval_bytecode(&bytecode).unwrap();
+    counts(&mut engine, host);
+}
+
+fn counts(engine: &mut Engine, host: &fake::FakeHost) {
     let renders = host.take();
     assert_eq!(renders.len(), 1);
     let (window, frame) = &renders[0];
