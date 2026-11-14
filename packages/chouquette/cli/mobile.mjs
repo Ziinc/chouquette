@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { build } from "./build.mjs";
 
 /** Phone targets: platform, Tauri target, and whether it is a device. */
+/** @type {Record<string, { platform: string, tauri: string }>} */
 export const targets = {
   "android-x86_64": { platform: "android", tauri: "x86_64" },
   "android-arm64": { platform: "android", tauri: "aarch64" },
@@ -17,6 +18,9 @@ export const targets = {
 /**
  * The levain-pack commands that build `name` for `target`: debug builds
  * (APK, simulator .app) to test, release builds (AAB, IPA) to ship.
+ * @param {{ target: string, native: string, archive: string, config: string, out: string, name: string,
+ *   release?: boolean, signingEnv?: string, features?: string[] }} options
+ * @returns {[string, string[]][]}
  */
 export function mobileSteps({ target, native, archive, config, out, name, release = false, signingEnv, features = [] }) {
   const t = targets[target];
