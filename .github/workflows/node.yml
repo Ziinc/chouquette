@@ -58,3 +58,27 @@ jobs:
       - run: npm ci
       - run: cargo test -p chouquette_node
         working-directory: native
+      # The M7 gate on desktop: create-next-app's starter, config changes only.
+      - run: cargo build -p chouquette_host --features playwright
+        working-directory: native
+      - name: Libnode beside the host
+        run: cp -P "$RUNNER_TEMP"/libnode/lib/* native/target/debug/
+      # The Windows runner has no GPU: Mesa's software drivers beside the host.
+      - name: Mesa
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download 26.2.5 -R pal1000/mesa-dist-win -p '*-release-msvc.7z' -O "$RUNNER_TEMP/mesa.7z"
+          7z x -y -o"$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa.7z" >/dev/null
+          cp "$RUNNER_TEMP"/mesa/x64/*.dll native/target/debug/
+          echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
+      - name: The Next.js starter end to end
+        working-directory: examples/next-starter
+        env:
+          CI: "1"
+          VK_ICD_FILENAMES: ${{ runner.os == 'Linux' && '/usr/share/vulkan/icd.d/lvp_icd.json' || '' }}
+        run: |
+          npm run build
+          if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a npx playwright test --trace off
+          else npx playwright test --trace off; fi
