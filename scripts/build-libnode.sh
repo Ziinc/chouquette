@@ -35,7 +35,8 @@ case "$(uname -s)" in
 esac
 
 # Headers: Node's, V8's, libuv's and their config, as `make install` lays them out.
-python3 tools/install.py install --headers-only --dest-dir "$out/root" --prefix /
+# Git Bash would turn the prefix `/` into its own install path on Windows.
+MSYS2_ARG_CONV_EXCL='--prefix=' python3 tools/install.py install --headers-only --dest-dir "$out/root" --prefix=/
 mv "$out/root/include" "$out/include" && rm -rf "$out/root"
 echo "libnode $version in $out"
 ls -la "$out/lib"
