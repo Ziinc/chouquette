@@ -1167,8 +1167,10 @@ dependencies = [
 name = "chouquette_host"
 version = "0.1.0"
 dependencies = [
+ "chouquette_node",
  "chouquette_quickjs",
  "levain",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tempfile",
@@ -1180,6 +1182,16 @@ version = "0.1.0"
 dependencies = [
  "chouquette_host",
  "tauri",
+]
+
+[[package]]
+name = "chouquette_node"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "levain",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -1,0 +1,47 @@
+name: libnode
+
+# Node as a shared library for the embedded Node runtime, per desktop, cached
+# by version and build script: a build is about an hour. Other workflows call
+# this and download the `libnode-<os>` artifact.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: v26.13.1
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ runner.temp }}/libnode
+          key: libnode-${{ env.NODE_VERSION }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-libnode.sh') }}
+      - uses: actions/setup-python@v5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.12"
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: steps.cache.outputs.cache-hit != 'true' && runner.os == 'Windows'
+      - name: Build libnode
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/build-libnode.sh "$NODE_VERSION" "$RUNNER_TEMP/libnode" "$RUNNER_TEMP/libnode-build"
+      - name: SHA-256
+        run: |
+          cd "$RUNNER_TEMP/libnode"
+          find lib -type f | sort | xargs shasum -a 256 | tee sha256sums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libnode-${{ runner.os }}
+          path: ${{ runner.temp }}/libnode

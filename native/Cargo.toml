@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["chouquette_quickjs", "chouquette_host", "chouquette_ios"]
+members = ["chouquette_quickjs", "chouquette_node", "chouquette_host", "chouquette_ios"]
 # The iOS wrapper is built for iOS only (levain-pack), not on desktops.
-default-members = ["chouquette_quickjs", "chouquette_host"]
+default-members = ["chouquette_quickjs", "chouquette_node", "chouquette_host"]
 
 [workspace.package]
 version = "0.1.0"

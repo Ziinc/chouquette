@@ -1,6 +1,7 @@
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import { createContext, runInContext } from "node:vm";
 import { expect, test } from "vitest";
 import { build } from "../cli/build.mjs";
@@ -45,4 +46,15 @@ test("with a host, the app ships as the host's bytecode", async () => {
   await build({ dir: counter, out: join(out, "app"), host });
   expect(readdirSync(join(out, "app")).sort()).toEqual(["app.json", "app.qjsbc"]);
   expect(readFileSync(join(out, "app/app.qjsbc"), "utf8")).toBe("bytecode");
+});
+
+test("for the node runtime the app is a CommonJS bundle that can require node:*", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "chouquette-node-"));
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "noder" }));
+  writeFileSync(join(dir, "chouquette.json"), JSON.stringify({ entry: "app.ts", runtime: "node" }));
+  writeFileSync(join(dir, "app.ts"), 'import { join } from "node:path";\n(globalThis as any).__ran = join("a", "b");\n');
+  await build({ dir, out: join(dir, "dist") });
+  expect(JSON.parse(readFileSync(join(dir, "dist/app.json"), "utf8")).runtime).toBe("node");
+  createRequire(import.meta.url)(join(dir, "dist/app.js"));
+  expect((globalThis as any).__ran).toBe(join("a", "b"));
 });

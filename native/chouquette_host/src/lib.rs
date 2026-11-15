@@ -1,6 +1,46 @@
-//! chouquette's host: levain with the QuickJS runtime.
+//! chouquette's host: levain with the QuickJS runtime and, built with
+//! libnode, embedded Node; each app picks one in its app.json.
 
 use std::path::PathBuf;
+
+use chouquette_node::NodeJs;
+use chouquette_quickjs::QuickJs;
+use levain::{App, AppPaths, Runtime, levain_abi::HostApi};
+
+/// The engine an app's app.json asks for (`"runtime"`), QuickJS by default.
+#[derive(Debug, PartialEq)]
+enum Engine {
+    QuickJs,
+    Node,
+}
+
+fn runtime_of(app_json: &[u8]) -> Engine {
+    let runtime = serde_json::from_slice::<serde_json::Value>(app_json)
+        .ok()
+        .and_then(|v| v.get("runtime")?.as_str().map(str::to_owned));
+    if runtime.as_deref() == Some("node") {
+        Engine::Node
+    } else {
+        Engine::QuickJs
+    }
+}
+
+/// Both runtimes: QuickJS finds the app (`app.js` or its bytecode), and the
+/// app's own choice runs it.
+struct Runtimes;
+
+impl Runtime for Runtimes {
+    fn locate(&self, paths: &AppPaths) -> Result<App, String> {
+        QuickJs.locate(paths)
+    }
+
+    fn start(&self, app: App, api: &'static HostApi) -> Result<(), String> {
+        match runtime_of(&std::fs::read(app.root.join("app.json")).unwrap_or_default()) {
+            Engine::Node => NodeJs.start(app, api),
+            Engine::QuickJs => QuickJs.start(app, api),
+        }
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -14,7 +54,7 @@ pub fn run() {
         }
         return;
     }
-    levain::run(chouquette_quickjs::QuickJs, tauri::generate_context!());
+    levain::run(Runtimes, tauri::generate_context!());
 }
 
 /// The paths of `--compile <source> <out>`, when it is among `args`.
@@ -40,6 +80,14 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn apps_pick_their_runtime() {
+        assert_eq!(runtime_of(br#"{"runtime": "node"}"#), Engine::Node);
+        assert_eq!(runtime_of(br#"{"runtime": "quickjs"}"#), Engine::QuickJs);
+        assert_eq!(runtime_of(b"{}"), Engine::QuickJs);
+        assert_eq!(runtime_of(b""), Engine::QuickJs);
     }
 
     #[test]

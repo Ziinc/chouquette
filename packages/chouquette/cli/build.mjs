@@ -20,6 +20,7 @@ export async function build({ dir, out = join(dir, "dist"), minify = false, host
   const config = JSON.parse(readFileSync(join(dir, "chouquette.json"), "utf8"));
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
   mkdirSync(out, { recursive: true });
+  const node = config.runtime === "node";
   // The native component sets the app uses; the runtime checks them against the host's.
   const sets = (config.components ?? ["gpui-kit"]).map(set =>
     JSON.parse(readFileSync(join(import.meta.dirname, "../components", `${set}.json`), "utf8")),
@@ -31,9 +32,11 @@ export async function build({ dir, out = join(dir, "dist"), minify = false, host
     outfile: join(out, "app.js"),
     absWorkingDir: dir,
     bundle: true,
-    format: "iife",
-    platform: "browser",
-    target: "es2020",
+    // QuickJS runs a script; embedded Node requires a CommonJS module, which
+    // can require Node's own modules.
+    ...(node
+      ? { format: "cjs", platform: "node", target: "node26" }
+      : { format: "iife", platform: "browser", target: "es2020" }),
     jsx: "automatic",
     minify,
     alias: { "react-dom": "@chouquette/react-dom" },
@@ -51,12 +54,13 @@ export async function build({ dir, out = join(dir, "dist"), minify = false, host
   }
   else await esbuild.build(options);
 
-  if (host) {
+  // Bytecode is QuickJS's; Node compiles its own.
+  if (host && !node) {
     execFileSync(host, ["--compile", join(out, "app.js"), join(out, "app.qjsbc")], { stdio: "inherit" });
     rmSync(join(out, "app.js"));
   } else rmSync(join(out, "app.qjsbc"), { force: true });
 
-  const app = { name: pkg.name, window: config.window ?? {}, ...(config.cli && { cli: config.cli }) };
+  const app = { name: pkg.name, window: config.window ?? {}, ...(node && { runtime: "node" }), ...(config.cli && { cli: config.cli }) };
   writeFileSync(join(out, "app.json"), JSON.stringify(app, null, 2) + "\n");
   return { out };
 }
