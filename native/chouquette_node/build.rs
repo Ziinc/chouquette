@@ -13,7 +13,12 @@ fn main() {
         return;
     };
     let lib = dir.join("lib");
-    cc::Build::new()
+    let mut build = cc::Build::new();
+    // MSVC reports __cplusplus as C++98 unless asked; V8's headers check it.
+    if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        build.flag("/Zc:__cplusplus");
+    }
+    build
         .cpp(true)
         .std("c++20")
         .file("shim/shim.cc")
