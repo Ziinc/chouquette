@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { expect, test } from "vitest";
 import { createRoot } from "../src/root";
+import { flushSync } from "../src/dom";
+import { applyPatch } from "../src/wire";
 import type { HostEvent } from "../src/wire";
 
 function mount(ui: React.ReactNode) {
@@ -56,4 +58,22 @@ test("elements among elements still splice", () => {
   const { frames, click } = mount(<Items />);
   click();
   expect(frames.at(-1)).toEqual({ patch: [{ op: "splice", at: [], start: 1, delete: 0, c: [{ t: "li", a: {}, c: ["item 1"] }] }] });
+});
+
+test("several root elements are wrapped in a div, as baguette's trees are", () => {
+  let setN = (_: number) => {};
+  function Two() {
+    const [n, set] = useState(2);
+    setN = set;
+    return <>{n > 1 && <b>first</b>}<p>{`n=${n}`}</p></>;
+  }
+  const frames: Record<string, any>[] = [];
+  const root = createRoot({ window: 0 }, { send: (_w, j) => frames.push(JSON.parse(j)), onEvent() {}, call() {} });
+  root.render(<Two />);
+  expect(frames[0].root).toEqual({ t: "div", a: {}, c: [{ t: "b", a: {}, c: ["first"] }, { t: "p", a: {}, c: ["n=2"] }] });
+  flushSync(() => setN(3));
+  expect(frames.at(-1)).toEqual({ patch: [{ op: "replace", at: [1, 0], node: "n=3" }] });
+  flushSync(() => setN(1));
+  const patched = frames.slice(1).reduce((t, f) => applyPatch(t, f.patch), structuredClone(frames[0].root));
+  expect(patched).toEqual({ t: "p", a: {}, c: ["n=1"] });
 });

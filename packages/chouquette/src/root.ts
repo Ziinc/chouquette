@@ -3,7 +3,7 @@ import { ConcurrentRoot, DiscreteEventPriority } from "react-reconciler/constant
 import { type Binding, type RootApi, RootContext } from "./context";
 import { syntheticEvent } from "./events";
 import { getHost, type Transport } from "./host";
-import { type RootContainer, type RowsContainer, getPriority, reconciler, serialize, setPriority } from "./host-config";
+import { type RootContainer, type RowsContainer, getPriority, reconciler, rootNode as wireRoot, serialize, setPriority } from "./host-config";
 import type { Appearance } from "./platform";
 import { handlersFor } from "./props";
 import type { HostEvent, Node } from "./wire";
@@ -40,7 +40,7 @@ export function createRoot({ window, theme }: RootOptions, transport: Transport 
   const lists = new Map<string, RowsContainer>();
 
   const send = (message: unknown) => transport.send(window, JSON.stringify(message));
-  const rootNode = (): Node => (container.children[0] ? serialize(container.children[0]) : null);
+  const rootNode = (): Node => wireRoot(container);
   const keymap = () =>
     [...bindings].map(([action, b]) => (b.context ? { keys: b.keys, action, context: b.context } : { keys: b.keys, action }));
   const tokens = (t: Theme) =>

@@ -80,7 +80,11 @@ function locate(node: Child): { container: Container; at: number[] } | null {
   for (let n: Child = node; ; ) {
     const p: Parent | null = n.parent;
     if (!p) return null;
-    if (isContainer(p)) return { container: p, at };
+    if (isContainer(p)) {
+      // Several root elements sit in a wrapping div.
+      if (p.kind === "root" && p.children.length > 1) at.unshift(slot(p.children, n));
+      return { container: p, at };
+    }
     at.unshift(slot(p.children, n));
     n = p;
   }
@@ -89,6 +93,13 @@ function locate(node: Child): { container: Container; at: number[] } | null {
 function record(container: Container, op: Op) {
   if (container.kind === "rows") container.root.dirty.add(container);
   else container.ops.push(op);
+}
+
+/** A window's tree on the wire: its element, or several wrapped in a div. */
+export function rootNode(container: RootContainer): Node {
+  if (container.children.length === 0) return null;
+  if (container.children.length === 1) return serialize(container.children[0]);
+  return { t: "div", a: {}, c: serializeChildren(container.children) };
 }
 
 export function serialize(node: Child): Node {
@@ -110,8 +121,7 @@ function insert(parent: Parent, child: Child, index: number) {
   parent.children.splice(index, 0, child);
   child.parent = parent;
   if (isContainer(parent)) {
-    if (parent.kind === "root" && parent.children.length > 1) throw new Error("chouquette renders one root element per window");
-    record(parent, { op: "replace", at: [], node: serialize(child) });
+    record(parent, { op: "replace", at: [], node: parent.kind === "root" ? rootNode(parent) : serialize(child) });
     return;
   }
   if (touchesText(parent.children, child, index)) return replaceParent(parent);
@@ -124,7 +134,7 @@ function remove(parent: Parent, child: Child) {
   if (isContainer(parent)) {
     parent.children.splice(index, 1);
     child.parent = null;
-    record(parent, { op: "replace", at: [], node: null });
+    record(parent, { op: "replace", at: [], node: parent.kind === "root" ? rootNode(parent) : null });
     return;
   }
   const touches = touchesText(parent.children, child, index);
