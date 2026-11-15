@@ -265,6 +265,42 @@ export const reconciler = Reconciler({
   waitForCommitToBeReady: () => null,
   getSuspendedCommitReason: () => null,
   requestPostPaintCallback: noop,
+  // View transitions: GPUI animates with classes, not snapshots. As React DOM
+  // does without document.startViewTransition, the commit runs straight
+  // through. Next.js's canary React makes every transition eligible.
+  suspendOnActiveViewTransition: noop,
+  startViewTransition(
+    _state: unknown, _container: unknown, _types: unknown,
+    mutation: () => void, layout: () => void, afterMutation: () => void, spawned: () => void,
+  ) {
+    mutation();
+    layout();
+    afterMutation();
+    spawned();
+    return null;
+  },
+  startGestureTransition: () => null,
+  stopViewTransition: noop,
+  addViewTransitionFinishedListener: (_transition: unknown, callback: () => void) => callback(),
+  createViewTransitionInstance: () => null,
+  applyViewTransitionName: noop,
+  restoreViewTransitionName: noop,
+  cancelViewTransitionName: noop,
+  cancelRootViewTransitionName: noop,
+  restoreRootViewTransitionName: noop,
+  cloneRootViewTransitionContainer: () => ({ kind: "root", children: [] }),
+  removeRootViewTransitionClone: noop,
+  measureInstance: () => null,
+  measureClonedInstance: () => null,
+  wasInstanceInViewport: () => true,
+  hasInstanceChanged: () => false,
+  hasInstanceAffectedParent: () => false,
+  getCurrentGestureOffset: () => 0,
+  // Fragment refs (<Fragment ref>) point at DOM nodes: chouquette has none.
+  createFragmentInstance: () => null,
+  updateFragmentInstanceFiber: noop,
+  commitNewChildToFragmentInstance: noop,
+  deleteChildFromFragmentInstance: noop,
   NotPendingTransition: null,
   HostTransitionContext: createContext(null),
   resetFormInstance: noop,

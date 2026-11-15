@@ -89,14 +89,25 @@ export function createRoot({ window, theme }: RootOptions, transport: Transport 
     },
   };
 
-  const onError = (error: unknown) => errors.push(error);
+  let flushing = 0;
+  // Errors in a render or event the caller waits on are thrown to it; any
+  // other render's (a transition, an update after a fetch) are reported.
+  const onError = (error: unknown) => {
+    if (flushing) errors.push(error);
+    else console.error("chouquette: uncaught error in a render:", error);
+  };
   const fiberRoot = reconciler.createContainer(
     container, ConcurrentRoot, null, false, null, "", onError, onError, onError, () => {}, null,
   );
 
   const flush = (fn: () => void) => {
-    fn();
-    reconciler.flushSyncWork();
+    flushing++;
+    try {
+      fn();
+      reconciler.flushSyncWork();
+    } finally {
+      flushing--;
+    }
     // A binding added or removed without a commit, or a theme change.
     if (sent && (full || JSON.stringify(keymap()) !== keymapSent)) frame();
     if (errors.length) throw errors.splice(0)[0];

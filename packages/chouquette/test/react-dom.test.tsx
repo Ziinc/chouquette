@@ -61,3 +61,12 @@ test("the rest of react-dom's API: flushSync, portals, resource hints, form hook
   expect(status).toEqual({ pending: false, data: null, method: null, action: null });
   expect(frames[0].root.c).toEqual(["1"]);
 });
+
+test("default imports work too, as react-dom's CommonJS gives them", async () => {
+  const client = (await import("@chouquette/react-dom/client")).default;
+  const dom = (await import("@chouquette/react-dom")).default;
+  expect(typeof client.hydrateRoot).toBe("function");
+  expect(typeof client.createRoot).toBe("function");
+  expect(typeof dom.flushSync).toBe("function");
+  expect(dom.version).toBe(reactVersion);
+});
