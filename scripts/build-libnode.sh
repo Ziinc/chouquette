@@ -31,6 +31,11 @@ case "$(uname -s)" in
     make -j"$jobs"
     mkdir -p "$out/lib"
     cp -P out/Release/libnode.* "$out/lib/" 2>/dev/null || cp -P out/Release/lib/libnode.* "$out/lib/"
+    # The linker looks for libnode.so / libnode.dylib; Node makes only the versioned one.
+    cd "$out/lib"
+    for f in libnode.so.*; do [ -e "$f" ] && ln -sf "$f" libnode.so; done
+    for f in libnode.*.dylib; do [ -e "$f" ] && ln -sf "$f" libnode.dylib; done
+    cd - >/dev/null
     ;;
 esac
 

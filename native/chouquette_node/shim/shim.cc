@@ -209,7 +209,12 @@ int cq_node_run(void* handle, const char* entry, char* error, size_t error_len) 
       rt->env = setup->env();
       if (!rt->queue.empty() || rt->stopping) uv_async_send(&rt->wake);
     }
-    if (code == 0) code = node::SpinEventLoop(setup->env()).FromMaybe(1);
+    if (code == 0) {
+      v8::Maybe<int> exit = node::SpinEventLoop(setup->env());
+      // node::Stop leaves no exit code: a stop the host asked for is a clean end.
+      std::lock_guard<std::mutex> guard(rt->lock);
+      code = rt->stopping ? 0 : exit.FromMaybe(1);
+    }
     rt->dispatch.Reset();
     uv_close(reinterpret_cast<uv_handle_t*>(&rt->wake), nullptr);
     uv_run(setup->event_loop(), UV_RUN_NOWAIT);
