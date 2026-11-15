@@ -5,6 +5,7 @@
 mod engine;
 #[cfg(test)]
 mod fake_host;
+mod web;
 
 use std::path::{Path, PathBuf};
 

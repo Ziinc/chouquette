@@ -20,6 +20,8 @@
   // An event from the host, as JSON.
   g.__chouquette_dispatch = json => {
     const event = JSON.parse(json);
+    // The runtime's own answers (web.js's fetch), not the host's events.
+    if (event.type === "__chouquette_fetch") return g.__chouquette_fetched(event);
     for (const listener of listeners) {
       try {
         listener(event);

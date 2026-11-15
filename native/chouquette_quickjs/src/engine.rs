@@ -9,6 +9,7 @@ use levain::levain_abi::{EventSink, HostApi};
 use rquickjs::{CatchResultExt, Context, Function, Module, Runtime, WriteOptions};
 
 const PRELUDE: &str = include_str!("prelude.js");
+const WEB: &str = include_str!("web.js");
 
 pub struct Engine {
     runtime: Runtime,
@@ -23,6 +24,7 @@ impl Engine {
         let runtime = Runtime::new().map_err(|e| e.to_string())?;
         let context = Context::full(&runtime).map_err(|e| e.to_string())?;
         let (tx, events) = channel();
+        let fetches = tx.clone();
         // The host keeps the sink for as long as the process runs.
         let ctx = Box::into_raw(Box::new(tx)).cast::<c_void>();
         (api.set_event_sink)(
@@ -61,9 +63,34 @@ impl Engine {
                 .set("__chouquette_log", log)
                 .catch(&ctx)
                 .map_err(|e| e.to_string())?;
+            let url = Function::new(ctx.clone(), crate::web::url);
+            let random = Function::new(ctx.clone(), crate::web::random);
+            let fetch = Function::new(
+                ctx.clone(),
+                move |id: f64,
+                      method: String,
+                      url: String,
+                      headers: String,
+                      body: Option<String>| {
+                    crate::web::fetch(fetches.clone(), id, method, url, headers, body);
+                },
+            );
+            for (name, f) in [
+                ("__chouquette_url", url),
+                ("__chouquette_random", random),
+                ("__chouquette_fetch", fetch),
+            ] {
+                globals
+                    .set(name, f)
+                    .catch(&ctx)
+                    .map_err(|e| e.to_string())?;
+            }
             ctx.eval::<(), _>(PRELUDE)
                 .catch(&ctx)
-                .map_err(|e| format!("prelude: {e}"))
+                .map_err(|e| format!("prelude: {e}"))?;
+            ctx.eval::<(), _>(WEB)
+                .catch(&ctx)
+                .map_err(|e| format!("web.js: {e}"))
         })?;
         Ok(Self {
             runtime,

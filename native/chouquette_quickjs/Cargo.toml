@@ -9,8 +9,13 @@ description = "Runs chouquette apps on QuickJS inside levain's host"
 
 [dependencies]
 levain = { workspace = true }
+base64 = "0.23"
+getrandom = "0.4"
 rquickjs = "0.14"
 serde_json = "1"
+# fetch: HTTP on a worker thread, answered through the JS thread's event loop.
+ureq = "3"
+url = "2"
 
 [dev-dependencies]
 tempfile = "3"
