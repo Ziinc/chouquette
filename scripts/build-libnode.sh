@@ -27,7 +27,7 @@ case "$(uname -s)" in
     mkdir -p "$out/lib" && cp out/Release/libnode.dll out/Release/libnode.lib "$out/lib/"
     ;;
   *)
-    ./configure --shared --without-npm --without-inspector --with-intl=small-icu
+    ./configure --shared --without-npm --with-intl=small-icu
     make -j"$jobs"
     mkdir -p "$out/lib"
     cp -P out/Release/libnode.* "$out/lib/" 2>/dev/null || cp -P out/Release/lib/libnode.* "$out/lib/"
