@@ -161,6 +161,13 @@ export function coalesce(ops: Op[]): Op[] {
   );
 }
 
+// A whole document, as Next.js's root layout renders it: <html> and <body>
+// are boxes, and what <head> holds is not drawn.
+const documentTags: Record<string, string> = { html: "div", body: "div" };
+const hiddenTags = new Set(["head", "title", "meta", "link", "script", "style", "noscript", "base", "template"]);
+const attrsOf = (tag: string, props: Record<string, unknown>, id: string) =>
+  hiddenTags.has(tag) ? { class: "hidden" } : toAttrs(documentTags[tag] ?? tag, props, id);
+
 let priority: number = NoEventPriority;
 export const setPriority = (p: number) => (priority = p);
 export const getPriority = () => priority;
@@ -183,10 +190,11 @@ export const reconciler = Reconciler({
   supportsMicrotasks: true,
   scheduleMicrotask: queueMicrotask,
 
-  createInstance(type: string, props: Record<string, unknown>, container: Container): Instance {
+  createInstance(tag: string, props: Record<string, unknown>, container: Container): Instance {
     const root = rootOf(container);
     const id = `h${root.nextId++}`;
-    const inst: Instance = { type, props, attrs: toAttrs(type, props, id), children: [], parent: null, id, root };
+    const type = hiddenTags.has(tag) ? "div" : (documentTags[tag] ?? tag);
+    const inst: Instance = { type, props, attrs: attrsOf(tag, props, id), children: [], parent: null, id, root };
     root.handlers.set(id, inst);
     return inst;
   },
@@ -225,9 +233,9 @@ export const reconciler = Reconciler({
     const where = locate(text);
     if (where && text.parent) record(where.container, { op: "replace", at: where.at, node: runText(text.parent.children, text) });
   },
-  commitUpdate(inst: Instance, type: string, _prev: unknown, next: Record<string, unknown>) {
+  commitUpdate(inst: Instance, tag: string, _prev: unknown, next: Record<string, unknown>) {
     inst.props = next;
-    const attrs = toAttrs(type, next, inst.id);
+    const attrs = attrsOf(tag, next, inst.id);
     const keys = Object.keys(attrs);
     if (keys.length === Object.keys(inst.attrs).length && keys.every(k => attrs[k] === inst.attrs[k])) return;
     inst.attrs = attrs;

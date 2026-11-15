@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./test": "./src/test/index.ts",
-    "./playwright": "./cli/playwright.mjs"
+    "./playwright": "./cli/playwright.mjs",
+    "./dom": "./src/dom.ts"
   },
   "dependencies": {
     "@chouquette/react-dom": "0.0.0",
