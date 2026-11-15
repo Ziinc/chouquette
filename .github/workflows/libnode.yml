@@ -40,7 +40,9 @@ jobs:
       - name: SHA-256
         run: |
           cd "$RUNNER_TEMP/libnode"
-          find lib -type f | sort | xargs shasum -a 256 | tee sha256sums.txt
+          # Git Bash on Windows has sha256sum, not shasum.
+          if command -v sha256sum >/dev/null; then sum=sha256sum; else sum="shasum -a 256"; fi
+          find lib -type f | sort | xargs $sum | tee sha256sums.txt
       - uses: actions/upload-artifact@v4
         with:
           name: libnode-${{ runner.os }}
