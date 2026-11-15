@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import * as esbuild from "esbuild";
 import { hashes } from "./components.mjs";
+import { buildNext, isNextApp } from "./next.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -17,6 +18,7 @@ const require = createRequire(import.meta.url);
  * @param {{ dir: string, out?: string, minify?: boolean, host?: string, watch?: boolean }} options
  */
 export async function build({ dir, out = join(dir, "dist"), minify = false, host, watch = false }) {
+  if (isNextApp(dir)) return buildNext({ dir, out });
   const config = JSON.parse(readFileSync(join(dir, "chouquette.json"), "utf8"));
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
   mkdirSync(out, { recursive: true });

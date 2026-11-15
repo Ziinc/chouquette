@@ -8,16 +8,21 @@
     ".": "./src/index.ts",
     "./test": "./src/test/index.ts",
     "./playwright": "./cli/playwright.mjs",
-    "./dom": "./src/dom.ts"
+    "./dom": "./src/dom.ts",
+    "./next": "./next/config.mjs",
+    "./next/run": "./next/run.cjs",
+    "./cli/*": "./cli/*"
   },
   "dependencies": {
     "@chouquette/react-dom": "0.0.0",
     "esbuild": "^0.28.2",
+    "happy-dom": "^21.0.4",
+    "light-my-request": "^6.8.1",
     "react-reconciler": "^0.34.0"
   },
   "peerDependencies": {
-    "react": "^19.3.0",
-    "@playwright/test": ">=1.58 <1.65"
+    "@playwright/test": ">=1.58 <1.65",
+    "react": "^19.3.0"
   },
   "bin": {
     "chouquette": "./bin/chouquette.mjs"
@@ -28,17 +33,18 @@
     }
   },
   "optionalDependencies": {
-    "@chouquette/host-linux-x64": "0.0.0",
-    "@chouquette/host-linux-arm64": "0.0.0",
     "@chouquette/host-darwin-arm64": "0.0.0",
     "@chouquette/host-darwin-x64": "0.0.0",
-    "@chouquette/host-win32-x64": "0.0.0",
-    "@chouquette/host-win32-arm64": "0.0.0"
+    "@chouquette/host-linux-arm64": "0.0.0",
+    "@chouquette/host-linux-x64": "0.0.0",
+    "@chouquette/host-win32-arm64": "0.0.0",
+    "@chouquette/host-win32-x64": "0.0.0"
   },
   "files": [
     "bin",
     "cli",
     "components",
+    "next",
     "src"
   ]
 }
