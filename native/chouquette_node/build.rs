@@ -27,7 +27,13 @@ fn main() {
         .warnings(false)
         .compile("chouquette_node_shim");
     println!("cargo::rustc-link-search=native={}", lib.display());
-    println!("cargo::rustc-link-lib=dylib=node");
+    // Node's Windows import library is libnode.lib; elsewhere the lib prefix is implied.
+    let name = if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        "libnode"
+    } else {
+        "node"
+    };
+    println!("cargo::rustc-link-lib=dylib={name}");
     // Tests and the dev host find libnode where it was built; a shipped
     // host carries it beside the executable ($ORIGIN, @executable_path).
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
