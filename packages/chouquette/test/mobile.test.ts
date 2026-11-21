@@ -23,12 +23,18 @@ test("an iOS simulator build", () => {
   ]);
 });
 
-test("release builds for phones, signed from the environment on Android", () => {
-  const android = mobileSteps({ ...common, target: "android-arm64", release: true, signingEnv: "COUNTER_ANDROID" });
-  expect(android[0][1]).toContain("--signing-env");
+// Signing is the app author's, through Tauri: chouquette never signs.
+test("release builds for phones, unsigned", () => {
+  const android = mobileSteps({ ...common, target: "android-arm64", release: true });
+  expect(android[0][1]).not.toContain("--signing-env");
   expect(android[1][1].slice(-6)).toEqual(["--product", "aab=/o/counter.aab", "--", "--aab", "--target", "aarch64"]);
   const ios = mobileSteps({ ...common, target: "ios", release: true });
   expect(ios[1][1].slice(-5)).toEqual(["--product", "ipa=/o/counter.ipa", "--", "--target", "aarch64"]);
+});
+
+test("a signing environment is not passed on", () => {
+  const steps = mobileSteps({ ...common, target: "android-arm64", release: true, signingEnv: "COUNTER_ANDROID" } as never);
+  expect(steps.flatMap(([, args]) => args)).not.toContain("--signing-env");
 });
 
 test("an unknown target is refused", () => {
