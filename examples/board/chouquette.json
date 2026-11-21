@@ -1,0 +1,6 @@
+{
+  "entry": "src/app.tsx",
+  "runtime": "quickjs",
+  "identifier": "com.example.board",
+  "window": { "title": "Board", "width": 560, "height": 400 }
+}

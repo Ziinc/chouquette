@@ -4,11 +4,15 @@
   const g = globalThis;
   const render = g.__chouquette_render;
   const log = g.__chouquette_log;
+  const call = g.__chouquette_call;
+  const checkComponents = g.__chouquette_check_components;
   const listeners = [];
 
   g.__chouquette_host = {
     send: (window, json) => render(window, json),
     onEvent: listener => void listeners.push(listener),
+    call: json => call(json),
+    checkComponents: json => checkComponents(json),
   };
 
   const report = error => log(error && error.stack ? `${error}\n${error.stack}` : String(error));
@@ -16,6 +20,8 @@
   // An event from the host, as JSON.
   g.__chouquette_dispatch = json => {
     const event = JSON.parse(json);
+    // The runtime's own answers (web.js's fetch), not the host's events.
+    if (event.type === "__chouquette_fetch") return g.__chouquette_fetched(event);
     for (const listener of listeners) {
       try {
         listener(event);

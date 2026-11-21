@@ -13,8 +13,11 @@ export type Op =
 /** A window's first frame carries `root`; later ones carry `patch`. */
 export type Frame = { root?: Node; patch?: Op[] };
 
-/** What the host sends back, e.g. `{type: "click", window: 0, event: "h1", values: {}}`. */
-export type HostEvent = { type: string; window: number; event?: string; values?: Record<string, unknown> };
+/**
+ * What the host sends back, e.g. `{type: "click", window: 0, event: "h1",
+ * values: {}}`; levain's events.json has every kind.
+ */
+export type HostEvent = { type: string; window?: number; event?: string; values?: Record<string, unknown>; [key: string]: unknown };
 
 /** Applies `patch` to `tree` in place, as the host does, and returns the new root. */
 export function applyPatch(tree: Node, patch: Op[]): Node {

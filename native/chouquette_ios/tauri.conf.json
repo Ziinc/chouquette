@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "chouquette",
+  "version": "0.1.0",
+  "identifier": "dev.chouquette.host",
+  "build": {
+    "frontendDist": "../chouquette_host/dist"
+  },
+  "app": {
+    "windows": [],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["../chouquette_host/icons/icon.png"],
+    "iOS": { "minimumSystemVersion": "15.0" }
+  }
+}

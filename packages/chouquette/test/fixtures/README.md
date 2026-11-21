@@ -1,2 +1,2 @@
-`patches.json` is copied from Ziinc/baguette `test/fixtures/patches.json` at
-`ff6df51db3c1b5a3b748843bf3f796a8aab458b5`. Switch to levain's copy once it lands.
+Copied from Ziinc/levain `fixtures/` at `53738e5a7cfcc5d6275b2b3c79c31ca81464c5c7`, levain's conformance set.
+Update them together with the levain revision in `native/Cargo.toml`.

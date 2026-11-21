@@ -1,0 +1,197 @@
+name: e2e
+
+# The counter end to end on all five platforms: through gpui-playwright on
+# the desktops, and on phones by tapping where the host logs the button.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # levain-pack, at the levain revision native/Cargo.toml pins.
+  LEVAIN_REV: 53738e5a7cfcc5d6275b2b3c79c31ca81464c5c7
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+          key: e2e
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: System dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev \
+            libssl-dev libxkbcommon-dev libxkbcommon-x11-dev libvulkan-dev mesa-vulkan-drivers \
+            libwayland-dev libx11-xcb-dev libfontconfig-dev libfreetype-dev libgbm-dev \
+            libegl-dev libxrandr-dev clang fonts-dejavu xvfb
+      - run: npm ci
+      # Plain-English visual checks (chouquette/playwright's expectToLook).
+      - run: cargo install --git https://github.com/Ziinc/gpui-visual-test cargo-visual-test --locked
+      - run: cargo build -p chouquette_host --features playwright
+        working-directory: native
+      # The Windows runner has no GPU: Mesa's software drivers beside the host.
+      - name: Mesa
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download 26.2.5 -R pal1000/mesa-dist-win -p '*-release-msvc.7z' -O "$RUNNER_TEMP/mesa.7z"
+          7z x -y -o"$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa.7z" >/dev/null
+          cp "$RUNNER_TEMP"/mesa/x64/*.dll native/target/debug/
+          echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
+      - name: Drive every example
+        env:
+          CI: "1"
+          # Each runner draws a little differently: a shot that is not the
+          # recorded one is judged again (GPUI_VISUAL_JUDGE), or warns.
+          GPUI_VISUAL_UNSURE: warn
+          VK_ICD_FILENAMES: ${{ runner.os == 'Linux' && '/usr/share/vulkan/icd.d/lvp_icd.json' || '' }}
+        run: |
+          for example in examples/*/; do
+            # Next.js apps run on embedded Node: node.yml drives them.
+            if ls "$example"next.config.* >/dev/null 2>&1; then continue; fi
+            echo "::group::$example"
+            (cd "$example" && npm run build &&
+              if [ "$RUNNER_OS" = Linux ]; then xvfb-run -a npx playwright test --trace off
+              else npx playwright test --trace off; fi)
+            echo "::endgroup::"
+          done
+      # An app built against other native components than the host has is refused.
+      - name: A mismatched component set is refused
+        if: runner.os == 'Linux'
+        env:
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.json
+        run: |
+          cp -r examples/gallery/dist "$RUNNER_TEMP/mismatch"
+          sed -i 's/"gpui-kit":"[0-9a-f]*"/"gpui-kit":"0000000000000000"/' "$RUNNER_TEMP/mismatch/app.js"
+          CHOUQUETTE_APP="$RUNNER_TEMP/mismatch" timeout 30 xvfb-run -a native/target/debug/chouquette_host > mismatch.log 2>&1 || true
+          cat mismatch.log
+          grep -q "compiled against other native components (gpui-kit)" mismatch.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-${{ matrix.os }}
+          path: examples/*/test-results
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+          key: android
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install NDK and levain-pack
+        run: |
+          sdkmanager --install "ndk;$NDK_VERSION"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          cargo install --git https://github.com/Ziinc/levain --rev "$LEVAIN_REV" levain-pack --locked
+      - run: npm ci
+      - name: Build the counter's APK
+        working-directory: examples/counter
+        run: npx chouquette build --target android-x86_64 --out "$RUNNER_TEMP/android"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run on the emulator
+        timeout-minutes: 25
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: scripts/android-smoke.sh ${{ runner.temp }}/android/counter.apk android-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-smoke
+          path: android-smoke
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+          key: ios-sim
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # idb-companion has no bottle and compiles only with Xcode 26, which the
+      # image carries beside its default; the app builds with the default.
+      - name: Install xcodegen, idb and levain-pack
+        run: |
+          brew install xcodegen
+          default=$(xcode-select -p)
+          xcode26=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$xcode26" ] || { echo "no Xcode 26 on this image"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode26"
+          brew install facebook/fb/idb-companion
+          sudo xcode-select -s "$default"
+          pipx install fb-idb
+          cargo install --git https://github.com/Ziinc/levain --rev "$LEVAIN_REV" levain-pack --locked
+      - run: npm ci
+      - name: Build the counter for the simulator
+        working-directory: examples/counter
+        run: npx chouquette build --target ios-sim --out "$RUNNER_TEMP/ios"
+      - name: Run on the simulator
+        run: scripts/ios-smoke.sh "$RUNNER_TEMP/ios/counter.app" com.example.counter ios-smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-smoke
+          path: ios-smoke

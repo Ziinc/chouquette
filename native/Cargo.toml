@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["chouquette_quickjs", "chouquette_host"]
+members = ["chouquette_quickjs", "chouquette_node", "chouquette_host", "chouquette_ios"]
+# The iOS wrapper is built for iOS only (levain-pack), not on desktops.
+default-members = ["chouquette_quickjs", "chouquette_node", "chouquette_host"]
 
 [workspace.package]
 version = "0.1.0"
@@ -9,7 +11,7 @@ license = "MIT"
 repository = "https://github.com/Ziinc/chouquette"
 
 [workspace.dependencies]
-levain = { git = "https://github.com/Ziinc/levain", rev = "268f2c3cc21108f5e9a780b8c02d87bcd8de73fb" }
+levain = { git = "https://github.com/Ziinc/levain", rev = "53738e5a7cfcc5d6275b2b3c79c31ca81464c5c7" }
 
 # As levain's own workspace: gpui-kit 0.7.3 plus the painted-text observation
 # gpui-playwright reads.
