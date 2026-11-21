@@ -31,12 +31,13 @@ export function bindgenEnv(target, { ndk, host, sdk }) {
 
 /**
  * The levain-pack commands that build `name` for `target`: debug builds
- * (APK, simulator .app) to test, release builds (AAB, IPA) to ship.
+ * (APK, simulator .app) to test, release builds (AAB, IPA) to ship, unsigned:
+ * the app's author signs them through Tauri.
  * @param {{ target: string, native: string, archive: string, config: string, out: string, name: string,
- *   release?: boolean, signingEnv?: string, features?: string[], extraEnv?: [string, string] }} options
+ *   release?: boolean, features?: string[], extraEnv?: [string, string] }} options
  * @returns {[string, string[]][]}
  */
-export function mobileSteps({ target, native, archive, config, out, name, release = false, signingEnv, features = [], extraEnv }) {
+export function mobileSteps({ target, native, archive, config, out, name, release = false, features = [], extraEnv }) {
   const t = targets[target];
   if (!t) throw new Error(`unknown target ${target} (${Object.keys(targets).join(", ")})`);
   const project = join(native, t.platform === "android" ? "chouquette_host" : "chouquette_ios");
@@ -46,7 +47,7 @@ export function mobileSteps({ target, native, archive, config, out, name, releas
     ...(t.platform === "ios" ? ["--env", `TAURI_LEVAIN_APP_ARCHIVE=${archive}`] : []),
     ...(extraEnv ? ["--env", `${extraEnv[0]}=${extraEnv[1]}`] : []),
   ];
-  const init = ["init", t.platform, ...common, ...(signingEnv ? ["--signing-env", signingEnv] : [])];
+  const init = ["init", t.platform, ...common];
   const ext = t.platform === "android" ? (release ? "aab" : "apk") : release ? "ipa" : "app";
   const tauri = [
     ...(t.platform === "android" ? [release ? "--aab" : "--apk"] : []),
@@ -72,14 +73,13 @@ export async function buildMobile({ dir, target, out = join(dir, "dist", target)
   mkdirSync(out, { recursive: true });
   // Until the hosts ship on npm (M4): the native workspace of this checkout.
   const native = resolve(process.env.CHOUQUETTE_NATIVE ?? join(import.meta.dirname, "../../../native"));
-  const signingEnv = release && target.startsWith("android") ? process.env.CHOUQUETTE_SIGNING_ENV : undefined;
   const t = targets[target];
   const extraEnv = bindgenEnv(target, {
     ndk: process.env.ANDROID_NDK_HOME ?? process.env.NDK_HOME,
     host: `${process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "windows" : "linux"}-x86_64`,
     sdk: t.platform === "ios" ? execFileSync("xcrun", ["--sdk", target === "ios" ? "iphoneos" : "iphonesimulator", "--show-sdk-path"], { encoding: "utf8" }).trim() : undefined,
   });
-  for (const [cmd, args] of mobileSteps({ target, native, archive, config: tauri, out: resolve(out), name: pkg.name, release, signingEnv, features, extraEnv }))
+  for (const [cmd, args] of mobileSteps({ target, native, archive, config: tauri, out: resolve(out), name: pkg.name, release, features, extraEnv }))
     execFileSync(process.env.LEVAIN_PACK ?? cmd, args, { stdio: "inherit" });
   return out;
 }

@@ -1,8 +1,10 @@
 name: release
 
 # A tag `v*` publishes chouquette, @chouquette/react-dom and the six desktop
-# hosts to npm, and the hosts to a GitHub release with their SHA-256s. A
-# manual run does everything but publish, as a dry run.
+# hosts to npm, and the hosts to a GitHub release with their SHA-256s, with
+# the counter's store builds beside them. A manual run does everything but
+# publish, as a dry run. Nothing is signed: an app's author signs its builds
+# through Tauri.
 on:
   push:
     tags: ["v*"]
@@ -122,9 +124,69 @@ jobs:
           name: counter-deb
           path: ${{ runner.temp }}/counter/dist/bundle/deb
 
+  # Store builds, unsigned: an Android App Bundle, and iOS's release build.
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install NDK and levain-pack
+        run: |
+          sdkmanager --install "ndk;$NDK_VERSION"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          cargo install --git https://github.com/Ziinc/levain --rev "$LEVAIN_REV" levain-pack --locked
+      - run: npm ci
+      - name: The counter's AAB
+        working-directory: examples/counter
+        run: npx chouquette build --target android-arm64 --release --out "$RUNNER_TEMP/android"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: store-android
+          path: ${{ runner.temp }}/android/*.aab
+
+  # An IPA needs a signing team, so this builds iOS's release library; the
+  # app's author exports and signs the IPA with `tauri ios build`.
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+          key: release-ios
+      - name: Release build
+        working-directory: native
+        run: |
+          export "BINDGEN_EXTRA_CLANG_ARGS_aarch64_apple_ios=--sysroot=$(xcrun --sdk iphoneos --show-sdk-path) --target=arm64-apple-ios"
+          cargo build -p chouquette_ios --release --target aarch64-apple-ios
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [version, hosts, ship]
+    needs: [version, hosts, ship, android, ios]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -138,6 +200,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: host-*
+      - uses: actions/download-artifact@v4
+        with:
+          name: store-android
+          path: store
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -152,5 +218,6 @@ jobs:
         run: |
           mkdir assets
           for host in host-*/; do tar czf "assets/${host%/}.tar.gz" -C "$host" .; done
+          cp store/*.aab assets/
           (cd assets && sha256sum * > sha256sums.txt)
           gh release create "$GITHUB_REF_NAME" assets/* --generate-notes
